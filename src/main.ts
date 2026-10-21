@@ -101,22 +101,33 @@ const params = new URLSearchParams(location.search);
 /** headless AI runs: no rendering, the sim runs as fast as it can */
 const HEADLESS = params.has('headless');
 let agent: Agent | null = null;
-if (params.has('agent')) {
-  const { AgentPanel } = await import('./agent/panel');
-  const panel = new AgentPanel(game, (a) => {
-    agent = a;
-    external.active = !!a;
-  });
-  if (HEADLESS) panel.el.style.display = 'none';
+let panel: import('./agent/panel').AgentPanel | null = null;
+/** the AI panel, created on first use (the "Let Chonk play" button or ?agent) */
+async function openPanel() {
+  if (!panel) {
+    const { AgentPanel } = await import('./agent/panel');
+    panel = new AgentPanel(game, (a) => {
+      agent = a;
+      external.active = !!a;
+      hud.setAgent(!!a);
+    });
+    if (HEADLESS) panel.el.style.display = 'none';
+    Object.assign(window, { chonkPanel: panel });
+  }
+  panel.show();
+  return panel;
+}
+hud.onAgent = async () => {
+  const p = await openPanel();
+  if (agent) p.stop();
+  else p.start(null);
+};
+if (params.has('agent') || params.has('replay') || params.has('play')) {
+  const p = await openPanel();
   const replay = params.get('replay');
   const play = params.get('play');
-  if (replay) fetch(`./runs/${replay}`).then((r) => r.json()).then((run) => panel.start(run));
-  else if (play) {
-    const sel = panel.el.querySelector<HTMLSelectElement>('.ag-model-sel')!;
-    sel.value = play;
-    panel.start(null);
-  }
-  Object.assign(window, { chonkPanel: panel });
+  if (replay) fetch(`./runs/${replay}`).then((r) => r.json()).then((run) => p.start(run));
+  else if (play) p.start(null, play);
 }
 function tick(n: number, intent: Partial<Intent> = {}) {
   for (let i = 0; i < n; i++) {

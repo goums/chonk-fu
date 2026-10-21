@@ -6,6 +6,8 @@
   color: var(--text); font: 500 13px/1.35 var(--f-body); backdrop-filter: blur(6px);
 }
 .ag-panel.folded .ag-body { display: none; }
+.ag-panel.hidden { display: none; }
+.ag-close { padding: 0 8px !important; font-size: 14px !important; }
 .ag-head { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-bottom: 1px solid rgba(217, 181, 106, 0.22); }
 .ag-head b { font: 600 14px/1 var(--f-title); letter-spacing: 0.06em; color: var(--gold-hi); flex: 1; }
 .ag-dot { width: 8px; height: 8px; border-radius: 50%; background: #ff8205; box-shadow: 0 0 8px #ff8205; }

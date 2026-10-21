@@ -89,7 +89,8 @@ export interface RetargetOptions {
    * the source's rotation change from its T-pose, and a relaxed human's upper back curves ~15 deg
    * forward of it (pelvis ~5 deg back): on our one-bone torso that tips the whole belly and head
    * forward. When set, the clip's mean pitch of the pelvis / spine / head is removed (sway and
-   * breathing stay) and the chest keeps this forward lean (rad).
+   * breathing stay) and the chest keeps this forward lean (rad). The legs are re-centred too: each
+   * thigh's mean direction maps onto the sculpted rest.
    */
   upright?: number;
   /**
@@ -408,8 +409,18 @@ export function retargetClip(lib: AnimLibrary, T: TargetRig, name: string, opts:
     const hRest = N.hinge.clone().applyQuaternion(hang);
     hRest.addScaledVector(u, -hRest.dot(u)).normalize();
     const restBend = signedAngle(u, lo, hRest);
+    // stance clips: each thigh's mean direction over the clip maps onto the sculpted rest (the human idle
+    // stands staggered, one foot back; the walk swings the feet mostly behind the hips), so the legs
+    // stand under the body and the stance / gait keeps only its swing around it
+    let stance: { hang: THREE.Quaternion; dir: THREE.Vector3 } | null = null;
+    if (l.leg && opts.upright !== undefined && opts.uprightFrom !== 'start') {
+      const dir = new THREE.Vector3();
+      for (let i = 0; i < s.frames; i++) dir.add(vec(s.pos[l.src[1]], i, _v).sub(vec(s.pos[l.src[0]], i, _w)).normalize());
+      dir.normalize();
+      stance = { hang: new THREE.Quaternion().setFromUnitVectors(dir, u), dir };
+    }
     return {
-      l, hang, N,
+      l, hang, N, stance,
       bend: restBend - (l.leg ? 0 : N.bend),
       minBend: Math.min(0, restBend),
       restFrame: basis(u, hRest).transpose(), // orthonormal: transpose = inverse
@@ -468,7 +479,8 @@ export function retargetClip(lib: AnimLibrary, T: TargetRig, name: string, opts:
       if (h.lengthSq() < 1e-8) h.copy(hingeRef(du, L.l.leg));
       h.normalize();
       const srcBend = signedAngle(du, dl, h);
-      A.copy(ID).slerp(L.hang, smooth(du.dot(L.N.dir), 0, 1));
+      if (L.stance) A.copy(ID).slerp(L.stance.hang, smooth(du.dot(L.stance.dir), 0, 1));
+      else A.copy(ID).slerp(L.hang, smooth(du.dot(L.N.dir), 0, 1));
       du.applyQuaternion(A);
       h.applyQuaternion(A);
       dl.applyQuaternion(A).applyAxisAngle(h, Math.max(L.minBend, srcBend + L.bend) - srcBend);

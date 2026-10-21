@@ -12,7 +12,7 @@ Keys: arrows / WASD move, Shift sprint, J punch (J J J combo), K belly jump, Spa
 
 ## Mistral plays
 
-Open the game with `?agent` (for example `http://localhost:5173/?agent`). A panel lets Mistral play, and replays recorded runs.
+Press **Let Chonk play** (top right) and Mistral takes over from where you are; press **Take control** to play again. The panel also replays recorded runs. `?agent` opens the panel on load.
 
 - **High-level actions.** Each turn the model calls one tool, `act`, with one action: `go`, `talk`, `hit`, `fight`, `sprint` or `wait`, and a target id. The harness does the rest: A* paths on a 1 m grid, facing, punch combos, belly jump timing, reading dialogs.
 - **Short text observations.** About 300 tokens per turn: health, bag, quest lines with target ids and distances, things nearby, the last 6 actions and their results, what people said. No images.

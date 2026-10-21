@@ -43,12 +43,13 @@ export class AgentPanel {
   private status: HTMLDivElement;
   private now: HTMLDivElement;
   private speed = 2;
+  private replayFile: string | null = null;
 
   constructor(private game: Game, private onRun: (a: Agent | null) => void) {
     const el = (this.el = document.createElement('div'));
-    el.className = 'ag-panel';
+    el.className = 'ag-panel hidden';
     el.innerHTML = `
-      <div class="ag-head"><span class="ag-dot"></span><b>Mistral plays</b><button class="ag-min" title="Fold">–</button></div>
+      <div class="ag-head"><span class="ag-dot"></span><b>Mistral plays</b><button class="ag-min" title="Fold">–</button><button class="ag-close" title="Close">×</button></div>
       <div class="ag-body">
         <div class="ag-row">
           <select class="ag-model-sel">${MODELS.map((m) => `<option value="${m.id}">${m.label}</option>`).join('')}</select>
@@ -70,6 +71,10 @@ export class AgentPanel {
     this.status = el.querySelector('.ag-status')!;
     this.now = el.querySelector('.ag-now')!;
     el.querySelector('.ag-min')!.addEventListener('click', () => el.classList.toggle('folded'));
+    el.querySelector('.ag-close')!.addEventListener('click', () => {
+      this.stop();
+      el.classList.add('hidden');
+    });
     el.querySelector('.ag-go')!.addEventListener('click', () => (this.agent ? this.stop() : this.start(null)));
     el.querySelectorAll<HTMLButtonElement>('.ag-speed button').forEach((b) =>
       b.addEventListener('click', () => {
@@ -87,24 +92,35 @@ export class AgentPanel {
       .catch(() => {});
     sel.addEventListener('change', async () => {
       if (!sel.value) return;
-      const run = (await (await fetch(`./runs/${sel.value}`)).json()) as RunFile;
+      this.replayFile = sel.value;
       // a replay needs a fresh world: reload with the run in the URL
-      if (this.game.t > 0.5 || this.agent) location.href = `?agent&replay=${encodeURIComponent(sel.value)}`;
-      else this.start(run);
+      if (this.game.t > 0.5 || this.agent) location.href = `?replay=${encodeURIComponent(sel.value)}`;
+      else this.start((await (await fetch(`./runs/${sel.value}`)).json()) as RunFile);
     });
     // keys typed in the panel must not move Le Chonk
     el.addEventListener('keydown', (e) => e.stopPropagation());
   }
 
-  async start(replay: RunFile | null) {
+  show() {
+    this.el.classList.remove('hidden');
+  }
+
+  /**
+   * Start the AI (or a replay). From a fresh game the run is recorded for replay; mid-game,
+   * Le Chonk simply goes on from where the player left him.
+   */
+  async start(replay: RunFile | null, model?: string) {
+    if (this.agent) return;
     const sel = this.el.querySelector<HTMLSelectElement>('.ag-model-sel')!;
-    const want = new URLSearchParams(location.search).get('play');
-    const m = want === 'script' ? { provider: 'mistral' as const, id: 'script', label: 'Scripted player' } : MODELS.find((x) => x.id === sel.value) ?? MODELS[0];
-    if (this.game.t > 0.5 && !replay) {
-      // a run starts from a fresh game
-      location.href = `?agent&play=${encodeURIComponent(m.id)}`;
+    if (model) sel.value = model;
+    const want = model ?? sel.value;
+    const m = want === 'script' ? { provider: 'mistral' as const, id: 'script', label: 'Scripted player' } : MODELS.find((x) => x.id === want) ?? MODELS[0];
+    if (replay && this.game.t > 0.5) {
+      // a replay needs the fresh world it was recorded in
+      location.href = `?replay=${encodeURIComponent(this.replayFile ?? '')}`;
       return;
     }
+    const fresh = this.game.t < 0.5;
     const keyEl = this.el.querySelector<HTMLInputElement>('.ag-key');
     const apiKey = keyEl?.value.trim() || undefined;
     if (keyEl && !replay) {
@@ -132,7 +148,7 @@ export class AgentPanel {
     this.now.innerHTML = '';
     this.setStatus(a.status === 'error' ? `Error: ${a.error}` : a.status === 'done' ? 'Finished!' : 'Stopped');
     this.log.insertAdjacentHTML('afterbegin', statsHtml(run.stats, run.model));
-    if (!replay) this.offerDownload(run);
+    if (!replay && fresh) this.offerDownload(run);
     this.agent = null;
     this.onRun(null);
     this.el.classList.remove('running');
