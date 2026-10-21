@@ -1,0 +1,22 @@
+{
+  "name": "chonk-fu-video",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render": "remotion render src/index.ts ChonkFu out/raw.mp4 --crf=18 && ffmpeg -y -loglevel error -i out/raw.mp4 -c:v copy -af loudnorm=I=-16:TP=-1.5:LRA=11 -c:a aac -b:a 192k out/chonk-fu.mp4",
+    "web": "mkdir -p ../public/video && ffmpeg -y -loglevel error -i out/chonk-fu.mp4 -vf scale=1920:1080 -c:v libx264 -preset slow -crf 29 -profile:v high -pix_fmt yuv420p -movflags +faststart -c:a aac -b:a 128k ../public/video/chonk-fu.mp4 && ffmpeg -y -loglevel error -ss 3 -i out/chonk-fu.mp4 -frames:v 1 -vf scale=1280:-2 -q:v 3 ../public/video/poster.jpg"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.537",
+    "@remotion/google-fonts": "^4.0.537",
+    "@remotion/media-utils": "^4.0.537",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "remotion": "^4.0.537"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "typescript": "^7.0.2"
+  }
+}

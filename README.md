@@ -4,7 +4,10 @@
 
 **A 3D kung fu adventure in the browser, starring Le Chonk. Mistral can play it for you.**
 
-▶️ **Play:** https://goums.github.io/chonk-fu/
+▶️ **Play:** https://goums.github.io/chonk-fu/ <br>
+🎬 **Video (1 min 36 s):** https://goums.github.io/chonk-fu/video/chonk-fu.mp4
+
+[![Watch the video](public/video/poster.jpg)](https://goums.github.io/chonk-fu/video/chonk-fu.mp4)
 
 ![CHONK FU gameplay](docs/img/gameplay.jpg)
 
@@ -66,3 +69,5 @@ npm run play -- --model mistral-large-4   # a headless run, saved for replay
 ## Stack
 
 three.js · TypeScript · Vite. Characters made with Hunyuan3D-2.1, rigged in Blender, animated with CC0 mocap. See [CREDITS.md](CREDITS.md).
+
+The video is made with Remotion from replays of the recorded runs, the game's own music and a Voxtral TTS voice-over (`video/`, `npm run render`).

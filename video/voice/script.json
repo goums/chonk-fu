@@ -1,0 +1,17 @@
+{
+  "voices": {
+    "narrator": "voice_3133"
+  },
+  "lines": [
+    { "id": "intro", "who": "narrator", "text": "In the Valley of Peace lives Le Chonk. He is round. He is orange. He is... a kung fu cat." },
+    { "id": "valley", "who": "narrator", "text": "Wolf bandits ran through the village. Papa Canard needs help. So Le Chonk smashes crates... and eats the dumplings." },
+    { "id": "stones", "who": "narrator", "text": "Master Tortue sends him to find five Jade Stones. One in a tree. One on an island. One in a cracked boulder: only a belly can break it. One in the wolf camp." },
+    { "id": "overfit", "who": "narrator", "text": "Then comes Overfit, the tiger. He learned every kung fu move in the world. Punch? Predicted!" },
+    { "id": "dragon", "who": "narrator", "text": "So Le Chonk eats the Dragon Noodles, and becomes Dragon Chonk. One Dragon Belly... that was not in the training data!" },
+    { "id": "harness", "who": "narrator", "text": "But who plays Le Chonk? Mistral Large Four. Every turn, it reads a short text: the quest, its health, the things nearby. About three hundred tokens. No images." },
+    { "id": "act", "who": "narrator", "text": "Then it picks one action, like go, talk, hit or fight, on a target. The game does the walking and the aiming. While Mistral thinks, the world waits." },
+    { "id": "replay", "who": "narrator", "text": "These are its real thoughts. And the game is deterministic, so every run replays exactly." },
+    { "id": "results", "who": "narrator", "text": "Three runs. Three wins. About five minutes of game time, fifty turns, and four to five cents per run." },
+    { "id": "outro", "who": "narrator", "text": "Press Let Chonk play, and watch the master. Or play it yourself. The link is below." }
+  ]
+}

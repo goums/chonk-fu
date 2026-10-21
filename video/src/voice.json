@@ -1,0 +1,72 @@
+[
+ {
+  "id": "intro",
+  "who": "narrator",
+  "text": "In the Valley of Peace lives Le Chonk. He is round. He is orange. He is... a kung fu cat.",
+  "file": "voice/intro-7c26cfb3b2.mp3",
+  "sec": 8.21
+ },
+ {
+  "id": "valley",
+  "who": "narrator",
+  "text": "Wolf bandits ran through the village. Papa Canard needs help. So Le Chonk smashes crates... and eats the dumplings.",
+  "file": "voice/valley-b50e8e5b77.mp3",
+  "sec": 7.57
+ },
+ {
+  "id": "stones",
+  "who": "narrator",
+  "text": "Master Tortue sends him to find five Jade Stones. One in a tree. One on an island. One in a cracked boulder: only a belly can break it. One in the wolf camp.",
+  "file": "voice/stones-f01d1f925c.mp3",
+  "sec": 11.91
+ },
+ {
+  "id": "overfit",
+  "who": "narrator",
+  "text": "Then comes Overfit, the tiger. He learned every kung fu move in the world. Punch? Predicted!",
+  "file": "voice/overfit-ed3983e0a4.mp3",
+  "sec": 6.78
+ },
+ {
+  "id": "dragon",
+  "who": "narrator",
+  "text": "So Le Chonk eats the Dragon Noodles, and becomes Dragon Chonk. One Dragon Belly... that was not in the training data!",
+  "file": "voice/dragon-033df148e1.mp3",
+  "sec": 7.17
+ },
+ {
+  "id": "harness",
+  "who": "narrator",
+  "text": "But who plays Le Chonk? Mistral Large Four. Every turn, it reads a short text: the quest, its health, the things nearby. About three hundred tokens. No images.",
+  "file": "voice/harness-c09e05fe21.mp3",
+  "sec": 12.4
+ },
+ {
+  "id": "act",
+  "who": "narrator",
+  "text": "Then it picks one action, like go, talk, hit or fight, on a target. The game does the walking and the aiming. While Mistral thinks, the world waits.",
+  "file": "voice/act-8b4e0ecc20.mp3",
+  "sec": 9.69
+ },
+ {
+  "id": "replay",
+  "who": "narrator",
+  "text": "These are its real thoughts. And the game is deterministic, so every run replays exactly.",
+  "file": "voice/replay-e38cef7102.mp3",
+  "sec": 4.89
+ },
+ {
+  "id": "results",
+  "who": "narrator",
+  "text": "Three runs. Three wins. About five minutes of game time, fifty turns, and four to five cents per run.",
+  "file": "voice/results-44ff09cc3f.mp3",
+  "sec": 6.4
+ },
+ {
+  "id": "outro",
+  "who": "narrator",
+  "text": "Press Let Chonk play, and watch the master. Or play it yourself. The link is below.",
+  "file": "voice/outro-3d95609fec.mp3",
+  "sec": 5
+ }
+]
