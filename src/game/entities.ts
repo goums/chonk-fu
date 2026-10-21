@@ -7,6 +7,7 @@ import { Batch, box, cyl, kitMaterial } from '../world/kit';
 import { groundAt } from '../world/world';
 import { addCircle, removeCollider, type Collider } from './colliders';
 import { excludeFromAO, sparkles } from './highlight';
+import { glowTexture, type ItemCue } from './itemIcons';
 
 export type ItemKind = 'jade' | 'peach' | 'shoot' | 'mushroom' | 'dumpling';
 export const ITEM_NAMES: Record<ItemKind, string> = {
@@ -16,6 +17,8 @@ export const ITEM_NAMES: Record<ItemKind, string> = {
 export abstract class Entity {
   alive = true;
   obj = new THREE.Group();
+  /** floating icon over things an active quest needs (set by the game) */
+  cue?: ItemCue;
   constructor(public id: string, public name: string, public x: number, public z: number, public radius: number) {
     this.obj.position.set(x, groundAt(x, z), z);
   }
@@ -93,6 +96,7 @@ itemGeo.set('dumpling', () => {
 export class Pickup extends Entity {
   private model: THREE.Object3D;
   private beam?: THREE.Mesh;
+  private glow?: THREE.Sprite;
   t0: number;
   /** pop-out animation when spawned from something broken */
   private pop = 0;
@@ -116,10 +120,26 @@ export class Pickup extends Entity {
       light.position.y = 1;
       this.obj.add(light);
     }
+    // noodle ingredients: a warm glow around the item and a short golden light column, easy to spot
+    // between the bamboo stalks
+    const ingredient = item === 'peach' || item === 'shoot' || item === 'mushroom';
+    if (ingredient) {
+      this.glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0xffc85a, transparent: true, opacity: 0.6, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
+      this.glow.scale.setScalar(1.9);
+      this.glow.position.y = 0.6;
+      this.glow.renderOrder = 4;
+      this.beam = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.12, 0.35, 7, 12, 1, true),
+        new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide, fog: false, blending: THREE.AdditiveBlending }),
+      );
+      this.beam.position.y = 3.5;
+      this.beam.userData.fx = true;
+      this.obj.add(excludeFromAO(this.glow), excludeFromAO(this.beam));
+    }
     // twinkling motes rising around it: "pick me up"
     let seed = 0;
     for (let i = 0; i < id.length; i++) seed = (seed * 31 + id.charCodeAt(i)) % 100000;
-    this.obj.add(item === 'jade' ? sparkles(0x7dffb8, 14, 0.75, seed, 0.06, 1.8) : sparkles(0xffe7a0, 8, 0.55, seed, 0.045, 1.2));
+    this.obj.add(item === 'jade' ? sparkles(0x7dffb8, 14, 0.75, seed, 0.06, 1.8) : ingredient ? sparkles(0xffe08a, 14, 0.7, seed, 0.06, 1.8) : sparkles(0xffe7a0, 8, 0.55, seed, 0.045, 1.2));
     this.t0 = (seed % 600) / 100;
   }
   spawnPop() {
@@ -133,7 +153,11 @@ export class Pickup extends Entity {
       y += Math.sin((1 - this.pop) * Math.PI) * 1.6;
     }
     this.model.position.y = y;
-    if (this.beam) (this.beam.material as THREE.MeshBasicMaterial).opacity = 0.14 + Math.sin(t * 3) * 0.05;
+    if (this.beam) (this.beam.material as THREE.MeshBasicMaterial).opacity = (this.item === 'jade' ? 0.14 : 0.17) + Math.sin(t * 3 + this.t0) * 0.05;
+    if (this.glow) {
+      this.glow.position.y = y + 0.1;
+      this.glow.material.opacity = 0.5 + Math.sin(t * 3.4 + this.t0) * 0.15;
+    }
   }
 }
 

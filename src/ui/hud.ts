@@ -2,6 +2,7 @@
 // markers, quest tracker with inventory, queued notifications (region reveals, quest banners, item feed,
 // info lines), letterboxed dialog, interaction prompt, boss bar and the ending card.
 import type { Game } from '../game/game';
+import { ICONS, type Icon } from '../game/itemIcons';
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, parent: HTMLElement, html = '') => {
   const e = document.createElement(tag);
@@ -30,16 +31,6 @@ const REGION_HANZI: Record<string, string> = {
   'Training Arena': '练武场', 'Wolf Camp': '狼营', 'Old Peach Tree': '古桃树', 'Hill Pagoda': '山塔', 'East Bridge': '东桥',
 };
 
-// ------------------------------------------------------------------ hand-drawn icons (no gradient ids: they get removed)
-type Icon = 'jade' | 'peach' | 'shoot' | 'mushroom' | 'dumpling' | 'scroll';
-const ICONS: Record<Icon, string> = {
-  jade: `<path d="M12 2.2 19.6 8 16.8 20.6H7.2L4.4 8Z" fill="#2c9a68"/><path d="M12 2.2 19.6 8 12 10.4 4.4 8Z" fill="#8af2c0"/><path d="M12 10.4 16.8 20.6H7.2Z" fill="#1d6e4a"/><path d="M4.4 8 12 10.4 7.2 20.6Z" fill="#3fc488"/><path d="M12 2.2 19.6 8 16.8 20.6H7.2L4.4 8Z" fill="none" stroke="#d8ffe9" stroke-opacity=".55" stroke-width=".7" stroke-linejoin="round"/>`,
-  peach: `<path d="M12 7.2c-4.6 0-7.6 3.2-7.6 7.2 0 4.2 3.4 7.4 7.6 7.4s7.6-3.2 7.6-7.4c0-4-3-7.2-7.6-7.2z" fill="#f28f74"/><path d="M12 7.2c4.6 0 7.6 3.2 7.6 7.2 0 2-1 4-2.6 5.4 1-5.8-2.2-10.4-5-12.6z" fill="#e0605a" opacity=".8"/><ellipse cx="8.6" cy="12" rx="2.2" ry="3" fill="#ffd9bc" opacity=".75"/><path d="M12 7.6c-1.4 3.6-1.2 9.4.4 13.8" stroke="#c84b4b" stroke-width=".8" fill="none"/><path d="M12.2 7.4c.8-3.2 3.8-4.8 7-4.2-.7 3-3.6 4.8-7 4.2z" fill="#5fae5a"/><path d="M12.2 7.4c2-1.6 3.8-2.6 6-3.4" stroke="#2f6e33" stroke-width=".6" fill="none"/>`,
-  shoot: `<path d="M12 1.8c2.6 4.6 5.6 9.6 5.6 14.6 0 3.4-2.6 5.6-5.6 5.6s-5.6-2.2-5.6-5.6c0-5 3-10 5.6-14.6z" fill="#d6b864"/><path d="M12 1.8c1.6 3 2.8 5.6 3.4 8-1.4-.6-2.4-.6-3.4 0z" fill="#8fc45a"/><path d="M6.6 16.6c2.2-1.8 8.6-1.8 10.8 0M7.8 12.2c1.6-1.4 6.8-1.4 8.4 0M9.4 8.2c1-.9 4.2-.9 5.2 0" stroke="#7a6326" stroke-width=".9" fill="none" stroke-linecap="round"/><path d="M12 22c-1.8-2.8-2.2-9.2 0-17" stroke="#fff3c4" stroke-opacity=".45" stroke-width=".8" fill="none"/>`,
-  mushroom: `<path d="M9.4 12.4h5.2l.8 7.6c-1.6 1.2-5.2 1.2-6.8 0z" fill="#f1e3c6"/><path d="M2.6 12.6C2.6 6.4 7 3.4 12 3.4s9.4 3 9.4 9.2c-3 1.4-15.8 1.4-18.8 0z" fill="#a85a34"/><path d="M5 9.6c1-3 3.8-4.6 7-4.6" stroke="#e7a77a" stroke-width="1.2" fill="none" stroke-linecap="round" opacity=".8"/><circle cx="9" cy="8.6" r="1.1" fill="#f6dcc0"/><circle cx="14.6" cy="7.4" r=".9" fill="#f6dcc0"/><circle cx="16.8" cy="10.4" r="1" fill="#f6dcc0"/>`,
-  dumpling: `<path d="M2.6 15.4C4 8.6 8 5.6 12 5.6s8 3 9.4 9.8c-3 2.6-15.8 2.6-18.8 0z" fill="#f6ecd4"/><path d="M7 7.8l1.4 3M10 6.2l.6 3.2M14 6.2l-.6 3.2M17 7.8l-1.4 3" stroke="#c9b48a" stroke-width=".9" stroke-linecap="round"/><path d="M4 15.6c3 1.6 13 1.6 16 0" stroke="#d8c6a0" stroke-width=".8" fill="none"/>`,
-  scroll: `<rect x="5" y="4" width="14" height="16" rx="1.5" fill="#efe0b8"/><rect x="3.6" y="2.6" width="16.8" height="3" rx="1.5" fill="#b0462f"/><rect x="3.6" y="18.4" width="16.8" height="3" rx="1.5" fill="#b0462f"/><path d="M8 9h8M8 12h8M8 15h5" stroke="#8a7650" stroke-width=".9"/>`,
-};
 const icon = (k: Icon, cls = 'ico') => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[k]}</svg>`;
 const iconFor = (text: string): Icon => {
   const t = text.toLowerCase();
@@ -103,6 +94,10 @@ export class Hud {
   private infoLayer: HTMLElement;
   private feed: HTMLElement;
   private boss: HTMLElement;
+  private tut: HTMLElement;
+  private lastTut = '';
+  private flash: HTMLElement;
+  private player: HTMLElement;
   private bossFill: HTMLElement;
   private bossGhost: HTMLElement;
   private end: HTMLElement;
@@ -134,7 +129,8 @@ export class Hud {
     root.classList.add('hud-root');
 
     // ---- player status
-    const player = el('div', 'hud-player hud-fade', root);
+    this.flash = el('div', 'screen-flash', root);
+    const player = (this.player = el('div', 'hud-player hud-fade', root));
     this.portrait = el('div', 'portrait', player);
     const segs = Array.from({ length: SEG }, (_, i) => {
       const rot = -90 + (i * 360) / SEG + GAP / 2;
@@ -176,9 +172,12 @@ export class Hud {
     this.prompt = el('div', 'prompt', root, '<kbd class="wide">Enter</kbd><span class="verb">Talk to</span>');
     this.promptName = el('span', 'who', this.prompt);
 
+    // ---- training key hints (Training Arena)
+    this.tut = el('div', 'tutorial', root);
+
     // ---- boss
     this.boss = el('div', 'boss', root);
-    el('div', 'boss-title', this.boss, '<span class="boss-name">Overfit</span><span class="boss-sub">the Tiger who memorized every move</span>');
+    el('div', 'boss-title', this.boss, '<span class="boss-name">Overfit</span><span class="boss-sub">He knows every kung fu move</span>');
     const bb = el('div', 'boss-bar', this.boss);
     this.bossGhost = el('div', 'boss-ghost', bb);
     this.bossFill = el('div', 'boss-fill', bb);
@@ -234,6 +233,12 @@ export class Hud {
       c.setAttribute('stroke-dasharray', `${segLen * f} ${CIRC}`);
     });
     const ready = P.chi >= Math.max(1, P.bellyCost);
+    // Dragon Chonk: a golden portrait and the Dragon Belly
+    if (this.player.classList.contains('dragon') !== g.dragon) {
+      this.player.classList.toggle('dragon', g.dragon);
+      this.bellyTag.innerHTML = g.dragon ? '<kbd>K</kbd>Dragon Belly' : '<kbd>K</kbd>Belly Bump';
+    }
+    this.flash.style.opacity = g.flash > 0.001 ? String(Math.min(1, g.flash * 1.2)) : '0';
     this.chiRing.classList.toggle('ready', ready);
     this.chiRing.classList.toggle('full', P.chi >= 99.9);
     this.bellyTag.classList.toggle('ready', ready);
@@ -242,11 +247,12 @@ export class Hud {
     const obj = g.objectives();
     let html = '', group = 'main';
     obj.forEach((o, i) => {
-      const side = o.text.startsWith('Dragon Noodles');
+      const side = !!o.side;
       if (i === 0 || side) {
-        group = side ? 'side' : 'main';
-        const label = side ? 'Side Quest' : o.done ? 'Complete' : 'Main Quest';
-        html += `<div class="q-head ${group}">${side ? '<i class="seal seal-q jade">膳</i>' : '<i class="seal seal-q">任</i>'}<span>${label}</span></div>`;
+        group = side && !o.required ? 'side' : 'main';
+        const label = o.required ? 'Needed Now' : side ? 'Side Quest' : o.done ? 'Complete' : 'Main Quest';
+        const seal = side ? `<i class="seal seal-q ${o.required ? '' : 'jade'}">${o.side === 'training' ? '武' : '膳'}</i>` : '<i class="seal seal-q">任</i>';
+        html += `<div class="q-head ${group}">${seal}<span>${label}</span></div>`;
         html += `<div class="q-title ${group} ${o.done ? 'done' : ''}">${esc(o.text)}</div>`;
       } else html += `<div class="q-sub ${o.done ? 'done' : ''}"><i></i>${esc(o.text)}</div>`;
     });
@@ -308,6 +314,28 @@ export class Hud {
       m.el.style.display = '';
     });
     for (let k = used; k < this.targetEls.length; k++) this.targetEls[k].el.style.display = 'none';
+
+    // ---- training key hints
+    const tut = g.tutorial();
+    const tutHtml = tut
+      ? `<div class="tut-label"><i class="seal seal-q jade">武</i><span>Training</span></div>
+        <div class="tut-keys">${tut.keys.map((k) => `<kbd class="${k.length > 1 ? 'wide' : ''}">${esc(k)}</kbd>`).join(tut.sep ? `<em>${esc(tut.sep)}</em>` : '')}</div>
+        <div class="tut-text">${esc(tut.text)}${tut.count ? ` <b>${esc(tut.count)}</b>` : ''}</div>
+        ${tut.progress !== undefined ? `<div class="tut-bar"><i style="width:${Math.round(tut.progress * 100)}%"></i></div>` : ''}`
+      : '';
+    if (tutHtml !== this.lastTut) {
+      const step = tut ? `${tut.text}|${tut.keys.join()}` : '';
+      const prev = this.tut.dataset.step ?? '';
+      this.tut.innerHTML = tutHtml || this.tut.innerHTML;
+      this.tut.classList.toggle('show', !!tut);
+      if (tut && step !== prev) {
+        this.tut.dataset.step = step;
+        this.tut.classList.remove('fresh');
+        void this.tut.offsetWidth;
+        this.tut.classList.add('fresh');
+      }
+      this.lastTut = tutHtml;
+    }
 
     // ---- interaction prompt
     const it = g.dialog ? null : g.interactable();
@@ -421,7 +449,7 @@ export class Hud {
     e.className = 'discover';
     const hz = REGION_HANZI[name] ?? '发现';
     const first = name === 'The Valley of Peace';
-    e.innerHTML = `<div class="d-kicker">${first ? 'Chonk Fu' : 'Region Discovered'}</div>
+    e.innerHTML = `<div class="d-kicker">${first ? 'Chonk Fu' : 'New Place'}</div>
       <div class="d-name">${esc(name)}</div>${FLOURISH}<div class="d-hanzi">${hz}</div>`;
     return e;
   }
@@ -431,8 +459,8 @@ export class Hud {
     let label = 'Quest Updated', seal = '进', title = clean, sub = '';
     const m = /^new quest:\s*/i.exec(clean);
     if (m) { label = 'New Quest'; seal = '任'; title = clean.slice(m[0].length); }
-    else if (/^you got/i.test(clean)) { label = 'Treasure Obtained'; seal = '宝'; title = clean.replace(/^you got\s*/i, '').replace(/!$/, ''); }
-    else if (/^all five|^dragon noodles!/i.test(clean)) { label = 'Quest Complete'; seal = '成'; }
+    else if (/^you got/i.test(clean)) { label = 'New Item'; seal = '宝'; title = clean.replace(/^you got\s*/i, '').replace(/!$/, ''); }
+    else if (/^all five|^dragon noodles!|^training done/i.test(clean)) { label = 'Quest Complete'; seal = '成'; }
     if (!m) {
       const k = title.indexOf('! ');
       if (k > 0) { sub = title.slice(k + 2); title = title.slice(0, k); }
@@ -492,11 +520,11 @@ export class Hud {
     const stat = (v: string, l: string) => `<div class="es"><b>${v}</b><span>${l}</span></div>`;
     this.end.innerHTML = `<div class="end-card">
       <div class="end-hanzi">功夫胖</div>
-      <div class="end-kicker">The Legend Is Written</div>
+      <div class="end-kicker">You Did It!</div>
       <div class="end-title">The Chonk Warrior</div>
       ${FLOURISH}
-      <p>The Oracle is awake, the Scroll is home, and the noodles are hot.</p>
-      <div class="end-stats">${stat(`${mins}:${String(secs).padStart(2, '0')}`, 'Time')}${stat(String(g.stats.smashed), 'Smashed')}${stat(String(g.stats.items), 'Items')}${stat(String(g.stats.deaths), 'Naps')}</div>
+      <p>The Oracle is awake. The Scroll is home. The noodles are hot!</p>
+      <div class="end-stats">${stat(`${mins}:${String(secs).padStart(2, '0')}`, 'Time')}${stat(String(g.stats.smashed), 'Smashed')}${stat(String(g.stats.items), 'Items')}${stat(String(g.stats.deaths), 'Falls')}</div>
       <button type="button">Play again</button>
       <i class="seal seal-end">胖</i></div>`;
     this.end.querySelector('button')!.addEventListener('click', () => location.reload());

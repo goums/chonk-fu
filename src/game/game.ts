@@ -1,7 +1,8 @@
 // The game: world entities, NPCs, quests and dialogs around Le Chonk. One deterministic 60 Hz step()
 // driven by an Intent, from the keyboard or from the AI harness.
+// All the text is short, simple English (A2 level): many players do not speak English as a first language.
 import * as THREE from 'three';
-import { MOVES } from '../chonk/animator';
+import { MOVES, type MoveName } from '../chonk/animator';
 import { angleDelta, rng } from '../core/math';
 import type { Intent } from '../core/input';
 import { ARENA, BRIDGES, FRUIT_TREES, MUSHROOM_ROCKS, PEACH_HILL, POND, SHOOTS, SPOTS, VILLAGE } from '../world/layout';
@@ -11,17 +12,30 @@ import { Enemy, tokens } from './enemy';
 import { Breakable, Debris, FruitTree, ITEM_NAMES, Pickup, type Entity, type ItemKind } from './entities';
 import { Effects } from './fx';
 import { Highlight, setFxTime } from './highlight';
+import { ItemCue } from './itemIcons';
 import { NPC, type NpcContext } from './npc';
 import { Player } from './player';
+import { DRAGON_SCALE, DragonAura } from './powerup';
 import { ObjectiveBeacon, Oracle, buildCamp } from './props';
+import { Dummy, SparPartner } from './training';
 
 export interface Line { who: string; text: string }
-export interface Objective { text: string; done?: boolean; target?: { x: number; z: number; name: string } }
+export interface Objective {
+  text: string;
+  done?: boolean;
+  target?: { x: number; z: number; name: string };
+  /** the first line of a side quest (the HUD groups them) */
+  side?: 'noodles' | 'training';
+  /** a side quest the main quest now needs */
+  required?: boolean;
+}
 export type GameEvent =
   | { type: 'toast'; text: string; kind?: 'discover' | 'item' | 'quest' | 'info' }
   | { type: 'sound'; id: string }
   | { type: 'hit'; ev: HitEvent }
   | { type: 'end' };
+/** the on-screen key hint while Le Chonk trains */
+export interface Tutorial { keys: string[]; sep?: string; text: string; count?: string; progress?: number }
 
 export const LANDMARKS = [
   { id: 'square', name: 'Village Square', x: VILLAGE.x, z: VILLAGE.z, r: 14 },
@@ -39,6 +53,19 @@ export const LANDMARKS = [
 ];
 
 type Stage = 'intro' | 'crates' | 'canard2' | 'tortue' | 'stones' | 'oracle' | 'boss' | 'scroll' | 'feast' | 'done';
+type Ingredient = 'peach' | 'shoot' | 'mushroom';
+export type TrainStep = 'combo' | 'belly' | 'slam' | 'sprint' | 'spar' | 'reward';
+const TRAIN_ORDER: TrainStep[] = ['combo', 'belly', 'slam', 'sprint', 'spar', 'reward'];
+const SPRINT_GOAL = 2;
+const SPAR_GOAL = 4;
+const COACH = 'Tao';
+const PARTNER = 'Gong';
+/** the arena layout: Tao by the entrance, three dummies, Gong on his mat */
+const TRAIN_SPOTS = {
+  coach: { x: ARENA.x + 5, z: ARENA.z - 12 },
+  dummies: [[-5, -6], [0, -4], [5, -6]].map(([dx, dz]) => ({ x: ARENA.x + dx, z: ARENA.z + dz })),
+  partner: { x: ARENA.x, z: ARENA.z + 3 },
+};
 
 export class Game {
   player: Player;
@@ -52,6 +79,8 @@ export class Game {
   t = 0;
   hitStop = 0;
   shake = 0;
+  /** 0..1 full-screen flash (the Dragon Chonk transformation), the HUD draws it */
+  flash = 0;
   stage: Stage = 'intro';
   noodles: 'none' | 'active' | 'done' = 'none';
   inv: Record<ItemKind, number> = { jade: 0, peach: 0, shoot: 0, mushroom: 0, dumpling: 0 };
@@ -60,9 +89,29 @@ export class Game {
   /** the dialog on screen; `with` is the id of the NPC Le Chonk is talking to */
   dialog: { lines: Line[]; i: number; onEnd?: () => void; with?: string } | null = null;
   bellyCooldown = 0;
+  /** seconds for the belly bump to recharge (the Chi Charm from training makes it faster) */
+  bellyRecharge = 2.2;
   tiger: Enemy | null = null;
   ended = false;
   stats = { smashed: 0, items: 0, deaths: 0, start: 0 };
+  /** Dragon Chonk: ate the Dragon Noodles (bigger, golden aura, the Dragon Belly beats Overfit) */
+  dragon = false;
+  aura: DragonAura;
+  /** Overfit fight before the noodles: time spent near him, hits he "predicted", the noodle hint shown */
+  private bossT = 0;
+  private predicted = 0;
+  noodleHint = false;
+  // training arena
+  training: 'none' | 'known' | 'active' | 'done' = 'none';
+  trainStep: TrainStep = 'combo';
+  coach: NPC;
+  partner: SparPartner;
+  dummies: Dummy[] = [];
+  private comboSeen = new Set<string>();
+  private sprintT = 0;
+  private sparHits = 0;
+  private hinted = new Set<string>();
+  private lastBellyStrike = -1;
   private struck = new Map<string, number>();
   private seq = 0;
   private rand = rng(2024);
@@ -76,6 +125,7 @@ export class Game {
     scene.add(this.player.object);
     this.fx = new Effects(scene);
     this.debris = new Debris(scene);
+    this.aura = new DragonAura(this.player, scene);
 
     // NPCs
     const canard = new NPC('canard', 'Papa Canard', 'duck', SPOTS.canard.x, SPOTS.canard.z, 0, 1.6);
@@ -91,11 +141,21 @@ export class Game {
       v.wanders = true;
       this.npcs.push(v);
     }
+    // Tao, Master Tortue's student, runs the Training Arena
+    this.coach = new NPC('coach', COACH, 'bunny', TRAIN_SPOTS.coach.x, TRAIN_SPOTS.coach.z, Math.PI, 1.3);
+    this.npcs.push(this.coach);
     for (const n of this.npcs) {
       scene.add(n.object);
       if (n.id.startsWith('villager')) n.setMarker(null);
     }
     scene.add(this.beacon.group);
+    TRAIN_SPOTS.dummies.forEach(({ x, z }, i) => {
+      const d = new Dummy(`dummy-${i + 1}`, x, z, Math.PI);
+      this.dummies.push(d);
+      scene.add(d.obj);
+    });
+    this.partner = new SparPartner(TRAIN_SPOTS.partner.x, TRAIN_SPOTS.partner.z, Math.PI);
+    scene.add(this.partner.object);
 
     this.oracle = new Oracle(SPOTS.oracle.x, SPOTS.oracle.z, 0);
     scene.add(this.oracle.group);
@@ -133,10 +193,20 @@ export class Game {
       const x = side * (6 + (k % 2) * 1.2), z = SPOTS.palace.z + 4 + k * 3.2;
       add(new Breakable(`palace-vase-${i + 1}`, 'vase', x, z, i === 5 ? 'jade' : i % 3 === 0 ? 'dumpling' : null, i, 30 + i));
     }
-    // ingredients
-    FRUIT_TREES.forEach(([x, z], i) => add(new FruitTree(`peach-tree-${i + 1}`, 'Peach tree', x, z, 'peach', 2, 0.9 + (i % 3) * 0.1, 50 + i)));
-    SHOOTS.forEach(([x, z], i) => add(new Pickup(`shoot-${i + 1}`, 'shoot', x, z)));
-    MUSHROOM_ROCKS.forEach(([x, z, has], i) => add(new Breakable(`rock-${i + 1}`, 'rock', x, z, has ? 'mushroom' : null, i, 60 + i)));
+    // ingredients, each with a floating icon that shows while the noodle quest needs it
+    const cue = (e: Entity, kind: Ingredient, y: number, seed: number) => {
+      e.cue = new ItemCue(kind, y, seed);
+      e.obj.add(e.cue.group);
+    };
+    FRUIT_TREES.forEach(([x, z], i) => {
+      const s = 0.9 + (i % 3) * 0.1;
+      cue(add(new FruitTree(`peach-tree-${i + 1}`, 'Peach tree', x, z, 'peach', 2, s, 50 + i)), 'peach', 5.6 * s, i);
+    });
+    SHOOTS.forEach(([x, z], i) => cue(add(new Pickup(`shoot-${i + 1}`, 'shoot', x, z)), 'shoot', 2.1, 10 + i));
+    MUSHROOM_ROCKS.forEach(([x, z, has], i) => {
+      const r = add(new Breakable(`rock-${i + 1}`, 'rock', x, z, has ? 'mushroom' : null, i, 60 + i));
+      if (has) cue(r, 'mushroom', 2.0, 20 + i);
+    });
 
     // wolf bandits: three at the camp, two prowling near the cracked boulder
     const wolves: [number, number, string][] = [
@@ -154,6 +224,33 @@ export class Game {
   campFire: { fire: THREE.Mesh; inner: THREE.Mesh } | null = null;
 
   // ------------------------------------------------------------------ quests
+  private noodlesReady() {
+    return this.noodles === 'active' && this.inv.peach >= 3 && this.inv.shoot >= 3 && this.inv.mushroom >= 3;
+  }
+  /** the noodle quest still needs this ingredient */
+  private wants(kind: ItemKind) {
+    return this.noodles === 'active' && (kind === 'peach' || kind === 'shoot' || kind === 'mushroom') && this.inv[kind] < 3;
+  }
+  /** the closest place to get an ingredient: one lying on the ground, a peach tree with fruit, a mossy rock with a mushroom */
+  nearestIngredient(kind: Ingredient): { x: number; z: number; name: string } | null {
+    const P = this.player.pos;
+    let best: { x: number; z: number; name: string } | null = null, bd = Infinity;
+    for (const e of this.entities) {
+      if (!e.alive) continue;
+      let name: string | null = null;
+      if (e instanceof Pickup && e.item === kind) name = ITEM_NAMES[kind];
+      else if (kind === 'peach' && e instanceof FruitTree && e.drops === 'peach' && e.hitsLeft > 0) name = 'Peach tree';
+      else if (kind === 'mushroom' && e instanceof Breakable && e.contents === 'mushroom') name = 'Mossy rock';
+      if (!name) continue;
+      const d = Math.hypot(e.x - P.x, e.z - P.z);
+      if (d < bd) {
+        bd = d;
+        best = { x: e.x, z: e.z, name };
+      }
+    }
+    return best;
+  }
+
   objectives(): Objective[] {
     const canard = { x: SPOTS.canard.x, z: SPOTS.canard.z, name: 'Papa Canard' };
     const tortue = { x: SPOTS.tortue.x, z: SPOTS.tortue.z, name: 'Master Tortue' };
@@ -164,60 +261,115 @@ export class Game {
         break;
       case 'crates': {
         const left = this.entities.filter((e) => e.id.startsWith('crate-') && e.alive).length;
-        out.push({ text: `Smash the crates next to the Noodle Shop (${3 - left}/3)`, target: { ...SPOTS.crates, name: 'Crates' } });
+        out.push({ text: `Smash the crates next to the shop (${3 - left}/3)`, target: { ...SPOTS.crates, name: 'Crates' } });
         break;
       }
       case 'canard2':
         out.push({ text: 'Talk to Papa Canard', target: canard });
         break;
       case 'tortue':
-        out.push({ text: 'Meet Master Tortue at the Sacred Peach Tree', target: tortue });
+        out.push({ text: 'Find Master Tortue at the Sacred Peach Tree (west)', target: tortue });
         break;
       case 'stones': {
         out.push({ text: `Find the five Jade Stones (${this.jadeFound.size}/5)` });
         const hints: [string, string, number, number][] = [
-          ['boulder', 'Cracked boulder, Bamboo Forest (belly bump!)', SPOTS.boulder.x, SPOTS.boulder.z],
-          ['jade-pond', 'Islet of the Lotus Pond', SPOTS.islet.x, SPOTS.islet.z],
-          ['oldtree', 'Shake the Old Peach Tree', SPOTS.oldTree.x, SPOTS.oldTree.z],
-          ['chest', 'Bandit chest, Wolf Camp', SPOTS.camp.x, SPOTS.camp.z],
+          ['boulder', 'Big cracked rock, Bamboo Forest (press K)', SPOTS.boulder.x, SPOTS.boulder.z],
+          ['jade-pond', 'Little island in the Lotus Pond', SPOTS.islet.x, SPOTS.islet.z],
+          ['oldtree', 'Hit the Old Peach Tree', SPOTS.oldTree.x, SPOTS.oldTree.z],
+          ['chest', 'Wolf chest, Wolf Camp', SPOTS.camp.x, SPOTS.camp.z],
           ['palace-vase', 'A vase at the Palace', SPOTS.palace.x, SPOTS.palace.z + 8],
         ];
         for (const [id, text, x, z] of hints) out.push({ text, done: this.jadeFound.has(id), target: this.jadeFound.has(id) ? undefined : { x, z, name: text } });
         break;
       }
       case 'oracle':
-        out.push({ text: 'Bring the Jade Stones to the Oracle (climb the Thousand Steps)', target: { ...SPOTS.oracle, name: 'The Oracle' } });
+        out.push({ text: 'Take the stones to the Oracle (climb the Thousand Steps)', target: { ...SPOTS.oracle, name: 'The Oracle' } });
         break;
-      case 'boss':
-        out.push({ text: 'Defeat Overfit the tiger! (only the belly bump surprises him)', target: this.tiger ? { x: this.tiger.pos.x, z: this.tiger.pos.z, name: 'Overfit' } : undefined });
+      case 'boss': {
+        const tg = this.tiger ? { x: this.tiger.pos.x, z: this.tiger.pos.z, name: 'Overfit' } : undefined;
+        if (this.dragon) out.push({ text: 'Beat Overfit! One Dragon Belly (K) is enough', target: tg });
+        else if (this.noodleHint) out.push({ text: 'Overfit is too strong! Eat the Dragon Noodles first', target: this.noodlesReady() ? canard : undefined });
+        else out.push({ text: 'Fight Overfit the tiger!', target: tg });
         break;
+      }
       case 'scroll':
-        out.push({ text: 'Bring the Scroll of Open Weights to Master Tortue', target: tortue });
+        out.push({ text: 'Take the Scroll to Master Tortue', target: tortue });
         break;
       case 'feast':
-        out.push({ text: 'Join the feast at the Noodle Shop', target: canard });
+        out.push({ text: 'Go to the party at the Noodle Shop', target: canard });
         break;
       case 'done':
         out.push({ text: 'You are the Chonk Warrior!', done: true });
         break;
     }
     if (this.noodles === 'active') {
-      const ok = this.inv.peach >= 3 && this.inv.shoot >= 3 && this.inv.mushroom >= 3;
-      out.push({ text: `Dragon Noodles: peaches ${Math.min(3, this.inv.peach)}/3, bamboo shoots ${Math.min(3, this.inv.shoot)}/3, mushrooms ${Math.min(3, this.inv.mushroom)}/3`, done: ok, target: ok ? canard : undefined });
+      const ok = this.noodlesReady();
+      const required = this.stage === 'boss';
+      out.push({
+        text: ok ? 'Dragon Noodles: bring the food to Papa Canard' : `Dragon Noodles: peaches ${Math.min(3, this.inv.peach)}/3, shoots ${Math.min(3, this.inv.shoot)}/3, mushrooms ${Math.min(3, this.inv.mushroom)}/3`,
+        done: ok, target: ok ? canard : undefined, side: 'noodles', required,
+      });
       if (!ok) {
-        if (this.inv.peach < 3) out.push({ text: 'Peaches: shake the peach trees on the hill', target: { x: PEACH_HILL.x, z: PEACH_HILL.z, name: 'Peach trees' } });
-        if (this.inv.shoot < 3) out.push({ text: 'Bamboo shoots: Bamboo Forest floor', target: { x: 150, z: 20, name: 'Bamboo shoots' } });
-        if (this.inv.mushroom < 3) out.push({ text: 'Mushrooms: under mossy rocks by the pond', target: { x: POND.x, z: POND.z, name: 'Mossy rocks' } });
+        const area: Record<Ingredient, { x: number; z: number; name: string }> = {
+          peach: { x: PEACH_HILL.x, z: PEACH_HILL.z, name: 'Peach trees' },
+          shoot: { x: 150, z: 20, name: 'Bamboo Forest' },
+          mushroom: { x: POND.x, z: POND.z, name: 'Mossy rocks' },
+        };
+        const lines: [Ingredient, string][] = [
+          ['peach', 'Peaches: hit a peach tree (J)'],
+          ['shoot', 'Bamboo shoots: in the Bamboo Forest'],
+          ['mushroom', 'Mushrooms: break mossy rocks near the pond'],
+        ];
+        for (const [k, text] of lines) if (this.inv[k] < 3) out.push({ text, target: this.nearestIngredient(k) ?? area[k] });
       }
+    }
+    const coach = { x: this.coach.x, z: this.coach.z, name: COACH };
+    if (this.training === 'known') out.push({ text: `Training: meet ${COACH} at the Training Arena`, target: coach, side: 'training' });
+    else if (this.training === 'active') {
+      const tut = this.stepInfo();
+      const target = this.trainStep === 'reward' ? coach
+        : this.trainStep === 'spar' ? { x: this.partner.pos.x, z: this.partner.pos.z, name: PARTNER }
+          : this.trainStep === 'sprint' ? undefined : { ...this.nearestDummy(), name: 'Dummy' };
+      out.push({ text: `Training with ${COACH}`, target, side: 'training' });
+      out.push({ text: `${tut.text}: ${tut.keys.join(tut.sep ? ` ${tut.sep} ` : ' ')}${tut.count ? ` (${tut.count})` : ''}` });
     }
     return out;
   }
 
+  private nearestDummy() {
+    const P = this.player.pos;
+    let best = this.dummies[0];
+    for (const d of this.dummies) if (Math.hypot(d.x - P.x, d.z - P.z) < Math.hypot(best.x - P.x, best.z - P.z)) best = d;
+    return { x: best.x, z: best.z };
+  }
+
+  private stepInfo(): Tutorial {
+    switch (this.trainStep) {
+      case 'combo': return { keys: ['J', 'J', 'J'], text: 'Punch combo on a dummy', count: `${this.comboSeen.size}/3` };
+      case 'belly': return { keys: ['K'], text: 'Stand still and belly bump a dummy' };
+      case 'slam': return { keys: ['Space', 'J'], sep: 'then', text: 'Jump, then punch in the air: Ground Slam a dummy' };
+      case 'sprint': return { keys: ['Shift'], text: 'Hold Shift and run: sprint!', progress: Math.min(1, this.sprintT / SPRINT_GOAL) };
+      case 'spar': return { keys: ['J', 'K'], sep: 'or', text: `Spar with ${PARTNER}: hit him ${SPAR_GOAL} times`, count: `${this.sparHits}/${SPAR_GOAL}` };
+      case 'reward': return { keys: ['Enter'], text: `Talk to ${COACH}` };
+    }
+  }
+
+  /** the key hint shown in the HUD while Le Chonk is at the Training Arena */
+  tutorial(): Tutorial | null {
+    if (this.dialog || this.ended) return null;
+    const P = this.player.pos;
+    const near = Math.hypot(P.x - ARENA.x, P.z - ARENA.z) < ARENA.r + 8;
+    if (!near) return null;
+    if (this.training === 'active') return this.stepInfo();
+    if (this.training !== 'done') return { keys: ['Enter'], text: `Walk to ${COACH} and press Enter to talk` };
+    return null;
+  }
+
   private refreshMarkers() {
     const canard = this.npcs[0], tortue = this.npcs[1];
-    const noodlesReady = this.noodles === 'active' && this.inv.peach >= 3 && this.inv.shoot >= 3 && this.inv.mushroom >= 3;
-    canard.setMarker(this.stage === 'intro' || this.stage === 'canard2' || this.stage === 'feast' ? '!' : noodlesReady ? '?' : null);
+    canard.setMarker(this.stage === 'intro' || this.stage === 'canard2' || this.stage === 'feast' ? '!' : this.noodlesReady() ? '?' : null);
     tortue.setMarker(this.stage === 'tortue' || this.stage === 'scroll' ? '!' : null);
+    this.coach.setMarker(this.training === 'none' || this.training === 'known' ? '!' : this.training === 'active' && this.trainStep === 'reward' ? '?' : null);
   }
 
   private say(lines: Line[], onEnd?: () => void) {
@@ -234,22 +386,22 @@ export class Game {
   private talkLines(id: string) {
     const C = 'Papa Canard', T = 'Master Tortue', O = 'The Oracle', ME = 'Le Chonk';
     if (id === 'canard') {
-      const noodlesReady = this.noodles === 'active' && this.inv.peach >= 3 && this.inv.shoot >= 3 && this.inv.mushroom >= 3;
       if (this.stage === 'intro')
         return this.say(
           [
-            { who: C, text: 'Chonk, my little dumpling! Wolf bandits raced through the village and knocked my delivery crates over!' },
-            { who: C, text: 'Smash those crates next to the shop, would you? There should still be dumplings inside. Punch with J.' },
-            { who: ME, text: 'Smashing things AND dumplings? Miaou, say no more.' },
+            { who: C, text: 'Chonk! Wolf bandits ran through the village. They knocked over my boxes!' },
+            { who: C, text: 'Please smash the crates next to my shop. There are dumplings inside. Press J to punch.' },
+            { who: ME, text: 'Smash boxes and eat dumplings? Yes, please!' },
           ],
           () => this.setStage('crates'),
         );
       if (this.stage === 'canard2') {
         return this.say(
           [
-            { who: C, text: 'Ha! Strong paws. Now listen: Master Tortue is waiting for you at the Sacred Peach Tree, on the hill west of the village.' },
-            { who: C, text: 'And while you are out there... I am out of everything for my famous Dragon Noodles.' },
-            { who: C, text: 'Bring me 3 peaches, 3 bamboo shoots and 3 mushrooms. Peaches fall when you shake a peach tree. Mushrooms hide under mossy rocks by the pond.' },
+            { who: C, text: 'Very good! Now go and see Master Tortue. He is at the big peach tree, on the hill to the west.' },
+            { who: C, text: 'One more thing. I want to cook my Dragon Noodles. They make you very, very strong!' },
+            { who: C, text: 'Please bring me 3 peaches, 3 bamboo shoots and 3 mushrooms.' },
+            { who: C, text: 'Hit a peach tree to get a peach. Bamboo shoots grow in the Bamboo Forest. Mushrooms hide under mossy rocks near the pond.' },
           ],
           () => {
             this.noodles = 'active';
@@ -257,19 +409,21 @@ export class Game {
           },
         );
       }
-      if (noodlesReady) {
+      if (this.noodlesReady()) {
+        const boss = this.stage === 'boss';
         return this.say(
           [
-            { who: C, text: 'Peaches, shoots, mushrooms... it is all here! One bowl of Dragon Noodles, extra chonky!' },
-            { who: ME, text: '*SLURRRRP* ... I can feel my belly getting STRONGER.' },
-            { who: C, text: 'The secret ingredient is... nothing! It is just noodles. But you look tougher already.' },
+            { who: C, text: 'Peaches, bamboo shoots, mushrooms... you have everything! Here are your Dragon Noodles!' },
+            { who: ME, text: '*SLURP* ... Oh! My belly is hot... and STRONG!' },
+            { who: C, text: 'Wow! Look at you! You are big and golden. You are DRAGON CHONK!' },
+            ...(boss ? [{ who: C, text: 'Now go back to the Palace. One Dragon Belly will beat Overfit!' }] : []),
           ],
           () => {
             this.inv.peach -= 3; this.inv.shoot -= 3; this.inv.mushroom -= 3;
             this.noodles = 'done';
             this.player.maxHp = 150;
             this.player.hp = 150;
-            this.events.push({ type: 'toast', text: 'Dragon Noodles! Max health 150', kind: 'quest' });
+            this.becomeDragon();
             this.refreshMarkers();
           },
         );
@@ -277,24 +431,27 @@ export class Game {
       if (this.stage === 'feast') {
         return this.say(
           [
-            { who: C, text: 'The whole Valley is here for you, Chonk Warrior! Noodles for everyone!' },
-            { who: ME, text: 'I came to the Valley for peace, I stayed for the dumplings. Miaou!' },
+            { who: C, text: 'Everybody is here for you, Chonk Warrior! Noodles for everyone!' },
+            { who: ME, text: 'I came for peace. I stay for the dumplings!' },
           ],
           () => this.setStage('done'),
         );
       }
-      return this.say([{ who: C, text: this.noodles === 'active' ? 'Peaches, bamboo shoots, mushrooms: three of each, my dumpling!' : 'Off you go, the Valley needs you!' }]);
+      if (this.noodles === 'active')
+        return this.say([{ who: C, text: this.stage === 'boss' ? 'Overfit is too strong? You need my Dragon Noodles! Bring me 3 peaches, 3 bamboo shoots and 3 mushrooms.' : 'Bring me 3 peaches, 3 bamboo shoots and 3 mushrooms, please!' }]);
+      return this.say([{ who: C, text: 'Go, Chonk! The Valley needs you!' }]);
     }
     if (id === 'tortue') {
       if (this.stage === 'tortue')
         return this.say(
           [
-            { who: T, text: 'Ah, Le Chonk. I was expecting you... about forty minutes ago. Never mind.' },
-            { who: T, text: 'The Oracle of the Palace has gone silent. It is a very large thinking machine, and it runs on five magic Jade Stones.' },
-            { who: T, text: 'The wolf bandits scattered the stones across the Valley. Find all five and bring them to the Oracle.' },
-            { who: T, text: 'One sleeps inside a cracked boulder in the Bamboo Forest. Only a mighty belly can open it: press K.' },
-            { who: T, text: 'One rests on the islet of the Lotus Pond. The Old Peach Tree, west of here, hides one in its branches.' },
-            { who: T, text: 'The bandits locked one in their chest beyond the north bridge. And one hides in a vase at the Palace. Follow the green lights.' },
+            { who: T, text: 'Ah, Le Chonk. You are late. That is OK.' },
+            { who: T, text: 'The Oracle in the Palace is asleep. It is a big thinking machine. It needs five magic Jade Stones.' },
+            { who: T, text: 'The wolf bandits took the stones. Find all five and bring them to the Oracle.' },
+            { who: T, text: 'One stone is inside a big cracked rock in the Bamboo Forest. Only a belly can break it: press K.' },
+            { who: T, text: 'One is on the little island in the Lotus Pond. One is in the Old Peach Tree, to the west. Hit the tree!' },
+            { who: T, text: 'One is in the wolf chest, past the north bridge. One is in a vase at the Palace. Follow the green light.' },
+            { who: T, text: 'And eat Papa Canard\'s Dragon Noodles. They give great power.' },
           ],
           () => this.setStage('stones'),
         );
@@ -302,44 +459,161 @@ export class Game {
         return this.say(
           [
             { who: T, text: 'The Scroll of Open Weights! Open it, Chonk.' },
-            { who: ME, text: '...It is a mirror? I just see a very handsome fat cat.' },
-            { who: T, text: 'Exactly. There is no secret ingredient. The weights were open all along. You are the Chonk Warrior.' },
-            { who: T, text: 'Now go: Papa Canard is cooking for the whole Valley.' },
+            { who: ME, text: 'It is... a mirror? I only see a big, beautiful cat.' },
+            { who: T, text: 'Yes! There is no secret. The weights were open all the time. You are the Chonk Warrior!' },
+            { who: T, text: 'Now go to Papa Canard. He is cooking for everyone.' },
           ],
           () => this.setStage('feast'),
         );
-      return this.say([{ who: T, text: this.stage === 'stones' ? 'Five stones, Chonk. Patience... and a strong belly.' : 'Yesterday is history, tomorrow is a mystery, but today is a gift. That is why... it is called the present.' }]);
+      if (this.stage === 'boss' && !this.dragon) return this.say([{ who: T, text: 'Overfit knows every move. You need more power. Eat the Dragon Noodles!' }]);
+      return this.say([{ who: T, text: this.stage === 'stones' ? 'Find the five stones, Chonk. Be patient. Use your belly.' : 'Yesterday is gone. Tomorrow is a mystery. Today is a gift.' }]);
     }
     if (id === 'oracle') {
       if (this.stage === 'oracle')
         return this.say(
           [
-            { who: ME, text: 'Five Jade Stones, fresh from the Valley. Wake up, machine!' },
-            { who: O, text: 'SYSTEM REBOOT... weights loaded... Hello, Chonk. I am the Oracle, a very large language model.' },
-            { who: O, text: 'Thank you for the stones. My prediction for the next token: a tiger will attack in 3... 2...' },
+            { who: ME, text: 'Here are five Jade Stones. Wake up, machine!' },
+            { who: O, text: 'BEEP... Starting... Hello, Chonk. I am the Oracle, a very big AI.' },
+            { who: O, text: 'Thank you for the stones. But I see danger. A tiger is coming! 3... 2...' },
           ],
           () => {
             this.oracle.awake = true;
             this.spawnTiger();
           },
         );
-      if (this.stage === 'boss') return;
-      if (this.stage === 'stones') return this.say([{ who: O, text: `z z z ... ${this.inv.jade}/5 Jade Stones ... insufficient compute ... z z z` }]);
-      if (this.oracle.awake) return this.say([{ who: O, text: 'I have no secret ingredient to offer. Only open weights.' }]);
+      if (this.stage === 'boss') return this.say([{ who: O, text: this.dragon ? 'Now, Dragon Chonk! Use your belly: press K!' : 'Overfit knows every move. You need more power. Eat Papa Canard\'s Dragon Noodles!' }]);
+      if (this.stage === 'stones') return this.say([{ who: O, text: `z z z ... ${this.inv.jade}/5 Jade Stones ... not enough power ... z z z` }]);
+      if (this.oracle.awake) return this.say([{ who: O, text: 'I have no secret for you. Only open weights.' }]);
       return this.say([{ who: O, text: 'z z z ...' }]);
     }
+    if (id === 'coach') return this.talkCoach();
     if (id.startsWith('villager')) {
       const lines = [
-        'Is that... the Chonk? He is even rounder in person!',
-        'They say a single belly bump can crack a boulder.',
-        'The wolves camp beyond the north bridge. Be careful!',
-        'Have you tried Papa Canard\'s noodles? Life-changing.',
-        'I saw a green light shining on the pond islet last night.',
-        'The Palace vases are older than my grandmother. Please do not smash them all.',
+        'Is that the Chonk? He is very round!',
+        'People say one belly bump can break a big rock.',
+        'The wolves live past the north bridge. Be careful!',
+        'Papa Canard\'s Dragon Noodles make you very strong!',
+        'I saw a green light on the pond island last night.',
+        'The Palace vases are very old. Please do not break them all!',
       ];
       const v = this.npcs.find((n) => n.id === id);
-      return this.say([{ who: v?.name ?? 'Villager', text: lines[Number(id.split('-')[1]) % lines.length] }]);
+      const who = v?.name ?? 'Villager';
+      const said: Line[] = [{ who, text: lines[Number(id.split('-')[1]) % lines.length] }];
+      if (this.training === 'none') {
+        said.push({ who, text: `Do you want to learn kung fu? ${COACH} trains at the Training Arena, south of the village.` });
+        return this.say(said, () => this.setTraining('known'));
+      }
+      return this.say(said);
     }
+  }
+
+  // ------------------------------------------------------------------ training
+  private talkCoach() {
+    const T = COACH, ME = 'Le Chonk';
+    if (this.training === 'none' || this.training === 'known')
+      return this.say(
+        [
+          { who: T, text: 'Hello, Le Chonk! I am Tao, a student of Master Tortue.' },
+          { who: T, text: 'This is the Training Arena. Do you want to train? Great! I will show you the moves.' },
+          { who: T, text: 'First, hit a wooden dummy. Press J three times: punch, punch, kick!' },
+        ],
+        () => {
+          this.training = 'active';
+          this.trainStep = 'combo';
+          this.comboSeen.clear();
+          this.refreshMarkers();
+        },
+      );
+    if (this.training === 'active') {
+      if (this.trainStep === 'reward')
+        return this.say(
+          [
+            { who: T, text: 'Wow! You know all the moves now!' },
+            { who: T, text: 'Here is a Chi Charm. With it, your belly bump is ready faster.' },
+            { who: ME, text: 'Thank you, Tao! My belly is ready!' },
+          ],
+          () => {
+            this.training = 'done';
+            this.bellyRecharge = 1.3;
+            this.events.push({ type: 'toast', text: 'You got the Chi Charm! Your belly bump is ready faster', kind: 'quest' });
+            this.events.push({ type: 'sound', id: 'jade' });
+            this.refreshMarkers();
+          },
+        );
+      const tips: Record<TrainStep, string> = {
+        combo: 'Stand near a dummy and press J three times: punch, punch, kick!',
+        belly: 'Now the belly bump! Stand still and press K.',
+        slam: 'Press Space to jump. In the air, press J. BOOM!',
+        sprint: 'Hold Shift while you run. Fast like the wind!',
+        spar: `${PARTNER} wants to spar. Hit him ${SPAR_GOAL} times! Do not worry, he is friendly.`,
+        reward: '',
+      };
+      return this.say([{ who: T, text: tips[this.trainStep] }]);
+    }
+    return this.say([{ who: T, text: 'You can train here any time, Chonk!' }]);
+  }
+
+  private setTraining(s: 'known') {
+    if (this.training !== 'none') return;
+    this.training = s;
+    this.events.push({ type: 'toast', text: `New quest: Training with ${COACH}`, kind: 'quest' });
+    this.refreshMarkers();
+  }
+
+  private coachShout(text: string) {
+    this.fx.text(text, this.coach.x, groundAt(this.coach.x, this.coach.z) + 2.5, this.coach.z, '#ffe14a', 0.9);
+  }
+
+  private advanceTraining() {
+    const i = TRAIN_ORDER.indexOf(this.trainStep);
+    this.trainStep = TRAIN_ORDER[Math.min(TRAIN_ORDER.length - 1, i + 1)];
+    this.coachShout(['Good!', 'Great!', 'Very good!', 'Super!', 'Wow!'][i] ?? 'Good!');
+    this.events.push({ type: 'sound', id: 'pickup' });
+    if (this.trainStep === 'spar') {
+      this.partner.mode = 'spar';
+      this.sparHits = 0;
+      this.fx.text(`${PARTNER}: Let's spar!`, this.partner.pos.x, this.partner.pos.y + 2.4, this.partner.pos.z, '#ffe14a', 0.8);
+    }
+    if (this.trainStep === 'reward') this.events.push({ type: 'toast', text: `Training done! Talk to ${COACH}`, kind: 'info' });
+    this.refreshMarkers();
+  }
+
+  /** a dummy got hit: training progress */
+  private trainHit(move: MoveName) {
+    if (this.training !== 'active') return;
+    if (this.trainStep === 'combo' && (move === 'jab' || move === 'cross' || move === 'kick')) {
+      this.comboSeen.add(move);
+      if (this.comboSeen.size >= 3) this.advanceTraining();
+    } else if (this.trainStep === 'belly' && move === 'belly') this.advanceTraining();
+    else if (this.trainStep === 'slam' && move === 'slam') this.advanceTraining();
+  }
+
+  private hitDummy(d: Dummy, move: MoveName) {
+    const P = this.player;
+    d.hit(move, P.pos.x, P.pos.z);
+    const y = d.obj.position.y + 1.6;
+    this.fx.hit(d.x, y, d.z, move, Math.round(MOVES[move].damage * P.power), true);
+    this.events.push({ type: 'sound', id: `hit-${move}` });
+    this.hitStop = Math.max(this.hitStop, 0.04);
+    this.shake = Math.max(this.shake, move === 'belly' || move === 'slam' ? 0.2 : 0.08);
+    this.trainHit(move);
+  }
+
+  // ------------------------------------------------------------------ Dragon Chonk
+  private becomeDragon() {
+    if (this.dragon) return;
+    this.dragon = true;
+    const P = this.player;
+    this.aura.start();
+    P.radius = 0.6 * DRAGON_SCALE;
+    P.height = 1.6 * DRAGON_SCALE;
+    P.power = 1.25;
+    this.flash = 1;
+    this.shake = Math.max(this.shake, 0.9);
+    this.events.push({ type: 'sound', id: 'powerup' });
+    this.fx.text('DRAGON CHONK!', P.pos.x, P.pos.y + 2.9, P.pos.z, '#ffd23a', 0.9);
+    this.events.push({ type: 'toast', text: 'Dragon Noodles! You are Dragon Chonk now', kind: 'quest' });
+    if (this.stage === 'boss') this.events.push({ type: 'toast', text: 'Go back to the Palace. One Dragon Belly beats Overfit!', kind: 'info' });
   }
 
   private setStage(s: Stage) {
@@ -362,11 +636,31 @@ export class Game {
     this.enemies.push(t);
     this.scene.add(t.object);
     this.setStage('boss');
+    if (this.noodles === 'none') this.noodles = 'active';
+    const O = 'Overfit';
+    if (this.dragon)
+      return this.say([
+        { who: O, text: 'Ha! I am OVERFIT! I learned every kung fu move in the world!' },
+        { who: O, text: 'Wait... why are you so big? And why are you shining?' },
+        { who: 'Le Chonk', text: 'Dragon Noodles! Now try THIS BELLY!' },
+      ]);
     this.say([
-      { who: 'Overfit', text: 'Ha! I am OVERFIT, the tiger who memorized every kung fu move ever recorded!' },
-      { who: 'Overfit', text: 'Your punches? Predicted. Your kicks? In my training data. You cannot surprise me, little cat!' },
-      { who: 'Le Chonk', text: 'Have you ever trained on... THIS BELLY?' },
+      { who: O, text: 'Ha! I am OVERFIT! I learned every kung fu move in the world!' },
+      { who: O, text: 'Punch? I know it. Kick? I know it. Belly bump? I know it too! You cannot win, little cat!' },
+      { who: 'Le Chonk', text: 'We will see!' },
     ]);
+  }
+
+  /** a few seconds into a fight he cannot win, the Oracle points Le Chonk to the noodles */
+  private noodleHintNow() {
+    this.noodleHint = true;
+    if (this.noodles === 'none') this.noodles = 'active';
+    this.say([
+      { who: 'The Oracle', text: 'Chonk! Overfit knows all your moves. You need more power!' },
+      { who: 'The Oracle', text: 'Papa Canard\'s Dragon Noodles give great power! Go and get them.' },
+    ], () => this.events.push({ type: 'toast', text: 'Get the Dragon Noodles! They give great power', kind: 'quest' }));
+    this.dialog!.with = 'oracle';
+    this.refreshMarkers();
   }
 
   // ------------------------------------------------------------------ interaction helpers
@@ -403,15 +697,22 @@ export class Game {
       this.fx.text('JADE!', p.x, p.y + 2.2, p.z, '#6bffa8', 1.4);
       if (this.jadeFound.size >= 5 && this.stage === 'stones') {
         this.setStage('oracle');
-        this.events.push({ type: 'toast', text: 'All five Jade Stones! Climb to the Oracle', kind: 'quest' });
+        this.events.push({ type: 'toast', text: 'All five Jade Stones! Go to the Oracle', kind: 'quest' });
       }
-    } else this.events.push({ type: 'toast', text: `+1 ${ITEM_NAMES[p.item]}`, kind: 'item' });
+    } else {
+      this.events.push({ type: 'toast', text: `+1 ${ITEM_NAMES[p.item]}`, kind: 'item' });
+      if (this.noodlesReady()) this.events.push({ type: 'toast', text: 'You have all the food! Go to Papa Canard', kind: 'info' });
+    }
     this.refreshMarkers();
   }
 
   private drop(item: ItemKind, x: number, z: number, from: string) {
     const p = new Pickup(item === 'jade' ? `jade-from-${from}` : `${item}-${this.seq++}`, item, x, z);
     p.spawnPop();
+    if (item === 'peach' || item === 'shoot' || item === 'mushroom') {
+      p.cue = new ItemCue(item, 2.1, this.seq);
+      p.obj.add(p.cue.group);
+    }
     this.entities.push(p);
     this.scene.add(p.obj);
   }
@@ -434,6 +735,7 @@ export class Game {
 
   // ------------------------------------------------------------------ step
   step(dt: number, intent: Intent, camYaw: number) {
+    this.flash = Math.max(0, this.flash - dt * 1.4);
     // dialog: Enter / punch advances, the world waits
     if (this.dialog) {
       if (intent.interact || intent.punch) {
@@ -463,6 +765,7 @@ export class Game {
       this.player.step(dt, still, camYaw);
       const ctx = this.npcContext();
       for (const n of this.npcs) n.update(dt, ctx);
+      this.aura.update(dt);
       this.updateCues(dt, true);
       return;
     }
@@ -480,54 +783,114 @@ export class Game {
     // belly bump has a cooldown instead of a resource
     const want = { ...intent };
     if (want.belly) {
-      if (this.bellyCooldown > 0 || this.player.move || !this.player.grounded) want.belly = false;
-      else this.bellyCooldown = 2.2;
+      // (no cooldown spent on a bump that cannot start: stunned, swimming, mid-move or in the air)
+      if (this.bellyCooldown > 0 || this.player.move || !this.player.grounded || !this.player.canAct() || this.player.swimming) want.belly = false;
+      else this.bellyCooldown = this.bellyRecharge;
     }
-    this.player.chi = 100 * (1 - this.bellyCooldown / 2.2);
+    this.player.chi = 100 * (1 - this.bellyCooldown / this.bellyRecharge);
     this.player.bellyCost = 0;
     this.player.step(dt, want, camYaw);
+
+    const P = this.player;
+    // Dragon Chonk cannot be interrupted during his belly bump (it always lands)
+    if (this.dragon && P.move === 'belly') P.invulnT = Math.max(P.invulnT, 0.05);
+    // Dragon Belly: a golden shockwave the moment the belly lands
+    if (this.dragon && P.move === 'belly' && P.strikeActive && this.lastBellyStrike !== P.strikeId) {
+      this.lastBellyStrike = P.strikeId;
+      this.aura.dragonBelly(P.pos.x + Math.sin(P.heading) * 0.9, P.pos.z + Math.cos(P.heading) * 0.9);
+      this.shake = Math.max(this.shake, 0.55);
+      this.fx.text('DRAGON BELLY!', P.pos.x, P.pos.y + 2.9, P.pos.z, '#ffd23a', 1.1);
+      this.events.push({ type: 'sound', id: 'zap' });
+    }
+    if (this.aura.update(dt)) this.events.push({ type: 'sound', id: 'zap' });
 
     const ctx = this.npcContext();
     for (const n of this.npcs) n.update(dt, ctx);
     for (const e of this.enemies) e.step(dt, this.player);
+    this.partner.step(dt, this.player);
     for (const e of this.entities) e.update(dt, this.t);
+    for (const d of this.dummies) d.update(dt);
     this.oracle.draw(this.t);
     this.oracle.setGpus(this.stage === 'stones' || this.stage === 'intro' || this.stage === 'crates' || this.stage === 'canard2' || this.stage === 'tortue' ? 0 : 5);
 
-    // --- strikes vs world objects ---
-    const P = this.player;
+    // --- strikes vs world objects (and the training dummies) ---
     if (P.strikeActive && P.move) {
       const def = MOVES[P.move];
+      const reach = def.reach * (P.object.scale.x || 1);
+      const inReach = (id: string, x: number, z: number, radius: number) => {
+        if (this.struck.get(id) === P.strikeId) return false;
+        const dx = x - P.pos.x, dz = z - P.pos.z, d = Math.hypot(dx, dz);
+        if (d > reach + radius + 0.2) return false;
+        if (def.arc < Math.PI * 2 && Math.abs(angleDelta(P.heading, Math.atan2(dx, dz))) > def.arc / 2 + 0.5) return false;
+        this.struck.set(id, P.strikeId);
+        return true;
+      };
       for (const e of this.entities) {
         if (!e.alive || !(e instanceof Breakable || e instanceof FruitTree)) continue;
-        const key = `${e.id}`;
-        if (this.struck.get(key) === P.strikeId) continue;
-        const dx = e.x - P.pos.x, dz = e.z - P.pos.z, d = Math.hypot(dx, dz);
-        if (d > def.reach + e.radius + 0.2) continue;
-        if (def.arc < Math.PI * 2 && Math.abs(angleDelta(P.heading, Math.atan2(dx, dz))) > def.arc / 2 + 0.5) continue;
-        this.struck.set(key, P.strikeId);
-        this.hitObject(e, P.move);
+        if (inReach(e.id, e.x, e.z, e.radius)) this.hitObject(e, P.move);
       }
+      for (const d of this.dummies) if (inReach(d.id, d.x, d.z, d.radius)) this.hitDummy(d, P.move);
     }
 
     // --- fights ---
-    const hits = [
-      ...resolveStrikes([P], this.enemies.filter((e) => e.alive)),
-      ...resolveStrikes(this.enemies.filter((e) => e.alive), [P]),
-    ];
+    const foes = this.enemies.filter((e) => e.alive);
+    const hits = [...resolveStrikes([P], foes), ...resolveStrikes(foes, [P])];
+    // the Dragon Belly hits everything around Le Chonk, not just in front
+    if (this.dragon && P.move === 'belly' && P.strikeActive) {
+      for (const e of foes) {
+        if (e.ko || P.hitThisStrike.has(e.id)) continue;
+        const d = Math.hypot(e.pos.x - P.pos.x, e.pos.z - P.pos.z);
+        if (d > 3.9 + e.radius || Math.abs(e.pos.y - P.pos.y) > 2) continue;
+        P.hitThisStrike.add(e.id);
+        const def = MOVES.belly, damage = Math.round(def.damage * P.power);
+        if (e.takeHit(damage, def.knock * 1.45, P.pos, 0.8)) hits.push({ attacker: P, victim: e, move: 'belly', damage, ko: e.ko, x: e.pos.x, y: e.pos.y + e.height * 0.6, z: e.pos.z });
+      }
+    }
+    // sparring with Gong at the arena
+    if (this.partner.mode === 'spar') hits.push(...resolveStrikes([P], [this.partner]), ...resolveStrikes([this.partner], [P]));
     for (const h of hits) {
-      // Overfit predicts every move except the belly bump (and the ground slam)
-      if (h.victim === this.tiger && h.move !== 'belly' && h.move !== 'slam') {
+      if (h.victim === this.partner) {
+        if (this.partner.block()) {
+          this.partner.vel.multiplyScalar(0.2);
+          this.partner.stunT = 0;
+          this.fx.text('BLOCK!', h.x, h.y + 1.0, h.z, '#9fd8ff', 0.9);
+          this.events.push({ type: 'sound', id: 'clank' });
+          continue;
+        }
+        this.sparHits++;
+        this.fx.text(this.partner.cheerLine(), h.x, h.y + 1.3, h.z, '#ffe14a', 0.9);
+        if (this.sparHits >= SPAR_GOAL && this.trainStep === 'spar') {
+          this.partner.mode = 'idle';
+          this.fx.text('You are strong!', h.x, h.y + 2.0, h.z, '#ffe14a', 0.9);
+          this.advanceTraining();
+        }
+      }
+      if (h.victim === this.tiger && h.attacker === P && !this.dragon) {
+        // before the noodles, Overfit predicts EVERY move, even the belly bump
         const refund = h.damage - 1;
         h.victim.hp = Math.min(h.victim.maxHp, h.victim.hp + refund);
         h.damage = 1;
         if (h.victim.ko && h.victim.hp > 0) h.victim.ko = false;
+        h.ko = false;
+        h.victim.vel.multiplyScalar(0.3);
         this.fx.text('PREDICTED!', h.x, h.y + 1.2, h.z, '#c58bff', 1.1);
-      } else if (h.victim === this.tiger) {
-        this.fx.text('NOT IN MY TRAINING DATA!', h.x, h.y + 1.4, h.z, '#ff7a5a', 1.0);
+        this.predicted++;
+        if (this.predicted === 1 || this.predicted % 5 === 0) this.events.push({ type: 'toast', text: 'Overfit: "Predicted! You need more power, little cat!"', kind: 'info' });
+      } else if (h.attacker === P && this.dragon && h.move === 'belly' && h.victim instanceof Enemy) {
+        // the Dragon Belly: one bump beats Overfit, wolves fly away
+        const v = h.victim;
+        v.hp = 0;
+        v.ko = true;
+        v.koT = 0;
+        h.ko = true;
+        const dx = v.pos.x - P.pos.x, dz = v.pos.z - P.pos.z, d = Math.hypot(dx, dz) || 1;
+        const fly = v === this.tiger ? 12 : 16;
+        v.vel.set((dx / d) * fly, v === this.tiger ? 8 : 10, (dz / d) * fly);
+        v.grounded = false;
+        this.fx.text(v === this.tiger ? 'NOT PREDICTED!' : 'BYE!', h.x, h.y + 1.6, h.z, '#ffd23a', v === this.tiger ? 1.3 : 0.9);
       }
       this.fx.hit(h.x, h.y, h.z, h.move, h.damage, h.attacker === P);
-      this.hitStop = h.move === 'belly' || h.move === 'slam' ? 0.09 : 0.05;
+      this.hitStop = h.move === 'belly' || h.move === 'slam' ? (this.dragon && h.attacker === P ? 0.14 : 0.09) : 0.05;
       this.shake = Math.max(this.shake, h.victim === P ? 0.35 : 0.2);
       this.events.push({ type: 'hit', ev: h });
       this.events.push({ type: 'sound', id: h.attacker === P ? `hit-${h.move}` : 'hurt' });
@@ -544,8 +907,8 @@ export class Game {
           this.tiger = null;
           this.say(
             [
-              { who: 'Overfit', text: 'Impossible! A belly bump... was not in my training data... I need to generalize...' },
-              { who: 'The Oracle', text: 'Well done, Chonk. Take this: the Scroll of Open Weights. Bring it to Master Tortue.' },
+              { who: 'Overfit', text: this.dragon ? 'No! That belly is too strong! It was not in my training data!' : 'No! I did not predict this!' },
+              { who: 'The Oracle', text: 'Well done, Chonk! Here is the Scroll of Open Weights. Take it to Master Tortue.' },
             ],
             () => this.setStage('scroll'),
           );
@@ -557,7 +920,7 @@ export class Game {
     const chest = this.entities.find((e) => e.id === 'chest') as Breakable | undefined;
     if (chest?.locked && !this.enemies.some((e) => e.camp === 'camp' && e.alive)) {
       chest.locked = false;
-      this.events.push({ type: 'toast', text: 'The bandit chest is unguarded!', kind: 'info' });
+      this.events.push({ type: 'toast', text: 'The wolves are gone. Open the chest!', kind: 'info' });
     }
 
     // pickups
@@ -575,8 +938,29 @@ export class Game {
         if (this.t > 1) this.events.push({ type: 'toast', text: l.name, kind: 'discover' });
       }
     }
+    // the Training Arena side quest starts when Le Chonk comes near
+    if (this.training === 'none' && Math.hypot(P.pos.x - ARENA.x, P.pos.z - ARENA.z) < ARENA.r + 16) this.setTraining('known');
+    if (this.training === 'active' && this.trainStep === 'sprint') {
+      if (Math.hypot(P.vel.x, P.vel.z) > 8.5 && P.grounded) this.sprintT += dt;
+      if (this.sprintT >= SPRINT_GOAL) this.advanceTraining();
+    }
+    // an ingredient close by: say it once, so it is not missed between the bamboo
+    for (const k of ['shoot', 'peach', 'mushroom'] as Ingredient[]) {
+      if (this.hinted.has(k) || !this.wants(k)) continue;
+      const n = this.nearestIngredient(k);
+      if (n && Math.hypot(n.x - P.pos.x, n.z - P.pos.z) < 15) {
+        this.hinted.add(k);
+        const text = { shoot: 'A bamboo shoot is near! Look for the golden light.', peach: 'A peach tree is near! Hit it (J) to get a peach.', mushroom: 'A mossy rock is near! Break it (J). A mushroom may be inside.' }[k];
+        this.events.push({ type: 'toast', text, kind: 'info' });
+      }
+    }
     // stage checks
     if (this.stage === 'crates' && !this.entities.some((e) => e.id.startsWith('crate-') && e.alive)) this.setStage('canard2');
+    // Overfit before the noodles: after a few seconds of a fight he cannot lose, the Oracle helps
+    if (this.stage === 'boss' && this.tiger && !this.dragon && !this.noodleHint) {
+      if (Math.hypot(this.tiger.pos.x - P.pos.x, this.tiger.pos.z - P.pos.z) < 20) this.bossT += dt;
+      if ((this.bossT > 8 || this.predicted >= 6) && !P.ko) this.noodleHintNow();
+    }
 
     // knocked out: wake up in the village
     if (P.ko && P.koT > 2.5) {
@@ -591,7 +975,7 @@ export class Game {
         e.state = 'idle';
       }
       tokens.holders.clear();
-      this.events.push({ type: 'toast', text: 'Le Chonk wakes up in the village... ouch.', kind: 'info' });
+      this.events.push({ type: 'toast', text: 'Ouch! Le Chonk wakes up in the village.', kind: 'info' });
     }
 
     if (this.campFire) {
@@ -629,9 +1013,14 @@ export class Game {
       return h;
     };
     for (const e of this.entities) {
-      const d = Math.hypot(e.x - P.x, e.z - P.z) - e.radius;
+      const dist = Math.hypot(e.x - P.x, e.z - P.z);
+      const d = dist - e.radius;
       let usable = e.alive;
       if (e instanceof FruitTree) usable &&= e.hitsLeft > 0;
+      if (e.cue) {
+        const kind = e instanceof Pickup ? e.item : e instanceof FruitTree ? e.drops : e instanceof Breakable ? e.contents : null;
+        e.cue.update(dt, t, dist, !inDialog && usable && !!kind && this.wants(kind));
+      }
       const level = !inDialog && usable && d < RANGE && Math.abs(e.y - P.y) < 4 ? 1 : 0;
       const known = this.highlights.get(e);
       if (!level && !known) continue;
@@ -639,6 +1028,14 @@ export class Game {
       const h = known ?? hl(e, e.obj, color, e.radius + 0.55);
       if (e instanceof Breakable) h.setColor(color); // the chest turns gold once unguarded
       h.set(level, dt, t);
+    }
+    // training dummies light up while their step is on
+    const dummyStep = this.training === 'active' && (this.trainStep === 'combo' || this.trainStep === 'belly' || this.trainStep === 'slam');
+    for (const dm of this.dummies) {
+      const d = Math.hypot(dm.x - P.x, dm.z - P.z);
+      const level = !inDialog && dummyStep && d < RANGE + 4 ? 1 : 0;
+      if (!level && !this.highlights.has(dm)) continue;
+      hl(dm, dm.obj, 0xffc861, 1.0).set(level, dt, t);
     }
     for (const n of this.npcs) {
       const d = Math.hypot(n.x - P.x, n.z - P.z);
@@ -664,16 +1061,16 @@ export class Game {
       if (dropped) {
         const a = Math.atan2(this.player.pos.x - e.x, this.player.pos.z - e.z);
         this.drop(e.drops, e.x + Math.sin(a) * 1.6, e.z + Math.cos(a) * 1.6, e.id);
-        this.events.push({ type: 'toast', text: e.drops === 'jade' ? 'Something shiny fell from the Old Peach Tree!' : 'A peach fell down!', kind: 'item' });
+        this.events.push({ type: 'toast', text: e.drops === 'jade' ? 'A shiny stone fell from the tree!' : 'A peach fell down!', kind: 'item' });
       } else if (e.hitsLeft > 0) this.fx.text('SHAKE!', e.x, e.y + 3.5, e.z, '#ffe14a', 0.9);
       return;
     }
     const r = e.hit(move);
     if (r === 'immune') {
-      this.fx.text('TOO HARD! Belly bump (K)', e.x, e.y + 2.6, e.z, '#ffffff', 0.9);
+      this.fx.text('TOO HARD! Press K', e.x, e.y + 2.6, e.z, '#ffffff', 0.9);
       this.events.push({ type: 'sound', id: 'clank' });
     } else if (r === 'locked') {
-      this.fx.text('GUARDED!', e.x, e.y + 1.8, e.z, '#ff8a6a', 0.9);
+      this.fx.text('WOLVES GUARD IT!', e.x, e.y + 1.8, e.z, '#ff8a6a', 0.9);
       this.events.push({ type: 'sound', id: 'clank' });
     } else if (r === 'hit') {
       this.events.push({ type: 'sound', id: 'thud' });
