@@ -160,6 +160,19 @@ export class Sfx {
         [84, 88, 91, 96, 100].forEach((m, i) => s.chime(this.verb, t + i * 0.06, m, 0.16, 1.4));
         s.noiseHit(this.verb, t + 0.1, { type: 'highpass', attack: 0.15, dur: 0.6, gain: 0.05, f0: 7000 });
         break;
+      case 'powerup':
+        // Dragon Chonk: a rising rumble, a taiko hit, a gong and a crackle of electric sparks
+        s.tone(o, t, { f0: 55, f1: 220, glide: 1.1, dur: 1.4, gain: 0.7 });
+        s.noiseHit(this.verb, t, { type: 'bandpass', attack: 0.6, dur: 1.2, gain: 0.25, f0: 300, f1: 4000, q: 1.2 });
+        s.taiko(o, t + 1.1, 1, 48);
+        s.cymbal(this.verb, t + 1.1, 0.5, 2.4);
+        [72, 79, 84, 91, 96].forEach((m, i) => s.chime(this.verb, t + 1.15 + i * 0.07, m, 0.14, 1.6));
+        for (let i = 0; i < 10; i++) s.noiseHit(o, t + 1.15 + i * 0.05 + Math.random() * 0.04, { type: 'highpass', dur: 0.02, gain: 0.25, f0: vary(5000, 0.3) });
+        break;
+      case 'zap':
+        // the aura's electric crackle
+        for (let i = 0; i < 3; i++) s.noiseHit(o, t + i * 0.03 + Math.random() * 0.02, { type: 'highpass', dur: 0.015, gain: 0.12, f0: vary(6000, 0.3) });
+        break;
       case 'pickup':
         s.tone(o, t, { type: 'triangle', f0: 880, dur: 0.06, gain: 0.25 });
         s.tone(o, t + 0.07, { type: 'triangle', f0: 1320, dur: 0.14, gain: 0.25 });
