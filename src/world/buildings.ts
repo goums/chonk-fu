@@ -308,7 +308,13 @@ export function buildArchitecture() {
 
   // --- the Palace on the mountain ---
   const pz = PALACE_MOUNT.z, ph = PALACE_MOUNT.h;
-  placed.push({ geo: palaceHall(22, 13), x: 0, z: pz - 6, ry: 0, y: ph, name: 'palace hall', collide: [13, 8.5] });
+  // the hall itself is solid; its stone platform, colonnade walk and front steps are walkable
+  placed.push({ geo: palaceHall(22, 13), x: 0, z: pz - 6, ry: 0, y: ph, name: 'palace hall', collide: [(22 - 1.5) / 2, (13 - 1.5) / 2] });
+  WALKABLES.push({ x: 0, z: pz - 6, hx: 13, hz: 8.5, top: ph + 1.72, stepsFront: { hx: 3.5, len: 3.6, base: ph } });
+  for (let i = 0; i < 8; i++) {
+    const px = -11 + (22 * i) / 7;
+    for (const dz of [-6.5, 6.5]) addCircle(px, pz - 6 + dz, 0.45, ph - 1, ph + 9);
+  }
   placed.push({ geo: cached('side', () => house(9, 6, 1, [C.jadeA, C.jadeB], 5)), x: -15, z: pz + 6, ry: Math.PI / 2, y: ph, name: 'palace dojo', collide: [4.2, 5.2] });
   placed.push({ geo: cached('side2', () => house(9, 6, 1, [C.jadeA, C.jadeB], 6)), x: 15, z: pz + 6, ry: -Math.PI / 2, y: ph, name: 'palace library', collide: [4.2, 5.2] });
   placed.push({ geo: pagoda(5, 6), x: 14, z: pz - 17, ry: 0.3, y: ph, name: 'pagoda', collide: [4.4, 4.4] });
@@ -370,6 +376,34 @@ export function buildArchitecture() {
   mesh.name = 'buildings';
   group.add(mesh);
   return group;
+}
+
+/** raised walkable areas (stone platforms) with optional front steps (toward +z) */
+interface Walkable { x: number; z: number; hx: number; hz: number; top: number; stepsFront?: { hx: number; len: number; base: number } }
+const WALKABLES: Walkable[] = [];
+export function platformAt(x: number, z: number): number {
+  let best = -Infinity;
+  for (const w of WALKABLES) {
+    const lx = x - w.x, lz = z - w.z;
+    if (Math.abs(lx) <= w.hx && Math.abs(lz) <= w.hz) best = Math.max(best, w.top);
+    const s = w.stepsFront;
+    if (s && Math.abs(lx) <= s.hx && lz > w.hz && lz < w.hz + s.len) {
+      // six steps down to the courtyard
+      const k = Math.floor(((lz - w.hz) / s.len) * 6);
+      best = Math.max(best, w.top - ((w.top - s.base) * (k + 1)) / 6.5);
+    }
+  }
+  return best;
+}
+
+/** on the Thousand Steps, feet rest on the step treads (the terrain under them is a smooth ramp) */
+export function stepTreadAt(x: number, z: number): number {
+  if (Math.abs(x - STAIRS.x) > STAIRS.halfWidth || z > STAIRS.z0 || z < STAIRS.z1) return -Infinity;
+  const rise = 0.25;
+  const n = Math.round((PALACE_MOUNT.h - GROUND) / rise);
+  const run = (STAIRS.z0 - STAIRS.z1) / n;
+  const k = Math.min(n - 1, Math.floor((STAIRS.z0 - z) / run));
+  return GROUND + (k + 1) * rise;
 }
 
 /** walkable height including bridge decks */
