@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { addFurShells } from './creature';
 import type { ChonkRig } from './model';
 
 const PARENT: Record<string, string | null> = {
@@ -15,10 +16,52 @@ const ORDER = ['hips', 'body', 'head', 'shoulderL', 'elbowL', 'shoulderR', 'elbo
 
 const loaded = new Map<string, GLTF>();
 
-export interface ModelInfo { tail?: { colors: number[]; r: number; segments: number } }
+export interface ModelInfo {
+  tail?: { colors: number[]; r: number; segments: number };
+  /** shell fur on the furry parts of the texture (cloth is detected by colour and left bare) */
+  fur?: { shells: number; len: number };
+}
 const INFO: Record<string, ModelInfo> = {
-  chonk: { tail: { colors: [0xe8893a, 0xb85a1c], r: 0.085, segments: 7 } },
+  chonk: { fur: { shells: 10, len: 0.028 } }, // the Tripo-based mesh has its own tail
+  tiger: { fur: { shells: 8, len: 0.022 } },
+  wolf: { fur: { shells: 8, len: 0.03 } },
+  bunny: { fur: { shells: 8, len: 0.025 } },
+  duck: { fur: { shells: 5, len: 0.012 } },
 };
+
+/**
+ * Per-vertex fur mask from the texture: fur colours (oranges, creams, whites, greys, browns of low
+ * saturation) get fur; saturated blues / purples / greens / reds and very dark tones (cloth, leather,
+ * collars) stay bare.
+ */
+function furMask(mesh: THREE.SkinnedMesh) {
+  const g = mesh.geometry;
+  const map = (mesh.material as THREE.MeshStandardMaterial).map;
+  const uv = g.attributes.uv;
+  const n = g.attributes.position.count;
+  const fur = new Float32Array(n).fill(1);
+  if (map?.image && uv) {
+    const img = map.image as CanvasImageSource & { width: number; height: number };
+    const W = Math.min(512, img.width), H = Math.min(512, img.height);
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d', { willReadFrequently: true })!;
+    ctx.drawImage(img, 0, 0, W, H);
+    const px = ctx.getImageData(0, 0, W, H).data;
+    const c = new THREE.Color(), hsl = { h: 0, s: 0, l: 0 };
+    for (let i = 0; i < n; i++) {
+      const u = uv.getX(i), v = uv.getY(i);
+      const x = Math.min(W - 1, Math.max(0, Math.floor(u * W)));
+      const y = Math.min(H - 1, Math.max(0, Math.floor((map.flipY ? 1 - v : v) * H)));
+      const k = (y * W + x) * 4;
+      c.setRGB(px[k] / 255, px[k + 1] / 255, px[k + 2] / 255, THREE.SRGBColorSpace).getHSL(hsl);
+      const hue = hsl.h * 360;
+      const cloth = (hsl.s > 0.3 && (hue > 170 || hue < 8)) || (hsl.s > 0.45 && hue > 75 && hue < 170) || hsl.l < 0.12;
+      fur[i] = cloth ? 0 : 1;
+    }
+  }
+  g.setAttribute('fur', new THREE.BufferAttribute(fur, 1));
+}
 
 export async function preloadModels(names: string[]) {
   const loader = new GLTFLoader();
@@ -97,6 +140,11 @@ export function rigFromModel(name: string): ChonkRig | null {
   const mat = mesh.material as THREE.MeshStandardMaterial;
   mat.roughness = Math.max(mat.roughness, 0.75);
   mat.metalness = 0;
+  const info = INFO[name] ?? {};
+  if (info.fur) {
+    if (!mesh.geometry.attributes.fur) furMask(mesh);
+    addFurShells(root, mesh, mesh.skeleton, info.fur.shells, info.fur.len, mat.map);
+  }
 
   // face pieces the animator expects (expressions are baked in the texture: these stay invisible)
   const dummy = () => {
@@ -106,7 +154,6 @@ export function rigFromModel(name: string): ChonkRig | null {
     return m;
   };
   // an animated tail (the generated one is removed in tools/rig.py)
-  const info = INFO[name] ?? {};
   const tail: THREE.Object3D[] = [B.tail0];
   if (info.tail) {
     B.tail0.rotation.x = -1.1;

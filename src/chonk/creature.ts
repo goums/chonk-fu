@@ -262,10 +262,10 @@ function buildFace(head: THREE.Bone, F: FaceDef) {
  * Shell fur: N copies of the skinned body pushed further along the normals, drawing only noisy strands
  * that thin out toward the tips. Base shells are darker (self-shadowing), tips catch the light.
  */
-export function addFurShells(root: THREE.Object3D, base: THREE.SkinnedMesh, skeleton: THREE.Skeleton, n: number, length: number) {
+export function addFurShells(root: THREE.Object3D, base: THREE.SkinnedMesh, skeleton: THREE.Skeleton, n: number, length: number, map?: THREE.Texture | null) {
   for (let i = 1; i <= n; i++) {
     const h = i / n;
-    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, alphaTest: 0.5 });
+    const mat = new THREE.MeshStandardMaterial(map ? { map, roughness: 0.9, alphaTest: 0.5 } : { vertexColors: true, roughness: 0.9, alphaTest: 0.5 });
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uShell = { value: h };
       sh.uniforms.uLen = { value: length };

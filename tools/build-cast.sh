@@ -18,8 +18,11 @@ mkdir -p public/models
 for row in "${CAST[@]}"; do
   read -r name height faces props <<<"$row"
   if [ $# -gt 0 ] && [[ ! " $* " =~ " $name " ]]; then continue; fi
-  [ -f "art/models/$name.glb" ] || { echo "skip $name (no art/models/$name.glb)"; continue; }
-  src="art/models/$name.glb"; [ "$name" = chonk ] && src="art/models/chonk-a.glb"
+  [ -f "art/models/$name.glb" ] || [ -f "art/refined/$name.glb" ] || { echo "skip $name (no source mesh)"; continue; }
+  src="art/models/$name.glb"
+  # refined meshes (tools/refine.py) win over raw generator output
+  [ -f "art/refined/$name.glb" ] && src="art/refined/$name.glb"
+  [ "$name" = chonk ] && [ ! -f "$src" ] && src="art/models/chonk-a.glb"
   tmp="$(mktemp -d)"
   blender -b -P tools/rig.py -- "$src" "$tmp/rigged.glb" "$height" "$faces" "${PREVIEW:--}${PREVIEW:+/$name}" "$props" 2>&1 | grep -E "PARTS|SKIN|EXPORTED"
   # meshoptimizer simplification to ~$faces triangles, then 1024 px textures
