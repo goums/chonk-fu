@@ -8,6 +8,7 @@ import { preloadModels, rigFromModel } from './chonk/gltfRig';
 import { initMotionLibrary, makeAnimator } from './chonk/motion';
 import { groundAt } from './world/world';
 import { Hud } from './ui/hud';
+import { GameAudio } from './audio';
 import { buildSky } from './world/sky';
 import { buildWorld } from './world/world';
 
@@ -36,6 +37,7 @@ await preloadModels(['chonk', 'tiger', 'wolf', 'tortoise', 'duck', 'pig', 'bunny
 await initMotionLibrary();
 const game = new Game(scene);
 const hud = new Hud(document.getElementById('hud')!, game);
+const audio = new GameAudio(); // starts on the first key / pointer press, M mutes
 const lineup: (() => void)[] = [];
 // ?compare: the three Le Chonk candidates side by side; keys 1/2/3 swap the playable one
 if (COMPARE) {
@@ -128,6 +130,7 @@ function frame(now: number) {
   water.update(time);
   grass.update(time);
   for (const f of lineup) f();
+  audio.update(game, real, follow.yaw); // reads this frame's game.events before they are cleared
   hud.update(real, follow.yaw);
   game.events.length = 0;
   if (post) post.render();
