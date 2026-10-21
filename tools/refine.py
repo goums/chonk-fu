@@ -26,6 +26,10 @@ FACES = int(argv[4]) if len(argv) > 4 else 40000
 SMOOTH = int(argv[5]) if len(argv) > 5 else 8
 VOXEL = float(argv[6]) if len(argv) > 6 else 220
 FIT = float(argv[7]) if len(argv) > 7 else 1.0
+# --keep-uv: keep the generator's own UVs and texture (aligned with its geometry) as the base layer and
+# paint the views over it only where the surface squarely faces them
+KEEP = "--keep-uv" in sys.argv
+W_ORIG = 0.35
 TEX = 2048
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -79,6 +83,10 @@ drop = [v for p in parts[1:] for v in p
 bmesh.ops.delete(bm, geom=list(set(drop)), context="VERTS")
 bm.to_mesh(obj.data)
 bm.free()
+# imported meshes carry baked (often hard-edged) normals: drop them so smoothing applies
+sel(obj)
+if obj.data.has_custom_normals:
+    bpy.ops.mesh.customdata_custom_splitnormals_clear()
 # normalise: feet at 0, centered, H tall
 vs = [v.co for v in obj.data.vertices]
 lo = Vector([min(v[i] for v in vs) for i in range(3)])
@@ -157,15 +165,34 @@ if FIT > 0:
     print("FIT front", np.round(rf[::20], 2).tolist())
     print("FIT back", np.round(rb[::20], 2).tolist())
 
+orig_img = None
+if KEEP:
+    for m in obj.data.materials:
+        for n in m.node_tree.nodes if m and m.use_nodes else []:
+            if n.type == "TEX_IMAGE" and n.image and any(l.to_socket.name == "Base Color" for l in n.outputs["Color"].links):
+                orig_img = n.image
+    while len(obj.data.uv_layers) > 1:
+        obj.data.uv_layers.remove(obj.data.uv_layers[-1])
+    obj.data.uv_layers[0].name = "bake"
+    print("KEEP original texture", orig_img.name if orig_img else None, orig_img.size[:] if orig_img else None)
 # drop the old UVs / materials: the texture is re-baked from the views
 obj.data.materials.clear()
-while obj.data.uv_layers:
+while obj.data.uv_layers and not KEEP:
     obj.data.uv_layers.remove(obj.data.uv_layers[0])
 sel(obj)
-rm = obj.modifiers.new("remesh", "REMESH")
-rm.mode = "VOXEL"
-rm.voxel_size = H / VOXEL
-bpy.ops.object.modifier_apply(modifier="remesh")
+if KEEP:
+    VOXEL = 0
+    FACES = 10**9
+    # one Catmull-Clark level rounds off the generator's facets (UVs are subdivided smoothly too)
+    sub = obj.modifiers.new("sub", "SUBSURF")
+    sub.levels = 1
+    sub.uv_smooth = "PRESERVE_BOUNDARIES"
+    bpy.ops.object.modifier_apply(modifier="sub")
+if VOXEL:
+    rm = obj.modifiers.new("remesh", "REMESH")
+    rm.mode = "VOXEL"
+    rm.voxel_size = H / VOXEL
+    bpy.ops.object.modifier_apply(modifier="remesh")
 if SMOOTH:
     sm = obj.modifiers.new("smooth", "LAPLACIANSMOOTH")
     sm.iterations = SMOOTH
@@ -181,11 +208,12 @@ bpy.ops.object.shade_smooth()
 print("GEOMETRY tris", sum(len(p.vertices) - 2 for p in obj.data.polygons))
 
 # ---- 2. UVs ----
-bpy.ops.object.mode_set(mode="EDIT")
-bpy.ops.mesh.select_all(action="SELECT")
-bpy.ops.uv.smart_project(angle_limit=math.radians(60), island_margin=0.004)
-bpy.ops.object.mode_set(mode="OBJECT")
-obj.data.uv_layers[0].name = "bake"
+if not KEEP:
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.uv.smart_project(angle_limit=math.radians(60), island_margin=0.004)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    obj.data.uv_layers[0].name = "bake"
 
 # ---- 3. projection setup ----
 V = np.array([v.co[:] for v in obj.data.vertices])
@@ -264,6 +292,17 @@ for name, (d, ax) in VIEWS_DEF.items():
         aw = N.new("ShaderNodeMath"); aw.operation = "ADD"
         L.new(num_w, aw.inputs[0]); L.new(fb.outputs[0], aw.inputs[1]); num_w = aw.outputs[0]
     print("VIEW", name, "px/m", round(scale, 1), "head col", round(cx, 1))
+if orig_img is not None:
+    # the generator's own texture as the base layer
+    uvo = N.new("ShaderNodeUVMap"); uvo.uv_map = "bake"
+    to = N.new("ShaderNodeTexImage"); to.image = orig_img
+    L.new(uvo.outputs["UV"], to.inputs["Vector"])
+    co = N.new("ShaderNodeVectorMath"); co.operation = "SCALE"; co.inputs["Scale"].default_value = W_ORIG
+    L.new(to.outputs["Color"], co.inputs[0])
+    ac = N.new("ShaderNodeVectorMath"); ac.operation = "ADD"
+    L.new(num_c, ac.inputs[0]); L.new(co.outputs[0], ac.inputs[1]); num_c = ac.outputs[0]
+    aw = N.new("ShaderNodeMath"); aw.operation = "ADD"; aw.inputs[1].default_value = W_ORIG
+    L.new(num_w, aw.inputs[0]); num_w = aw.outputs[0]
 eps = N.new("ShaderNodeMath"); eps.operation = "MAXIMUM"; eps.inputs[1].default_value = 1e-4
 L.new(num_w, eps.inputs[0])
 inv = N.new("ShaderNodeMath"); inv.operation = "DIVIDE"; inv.inputs[0].default_value = 1.0

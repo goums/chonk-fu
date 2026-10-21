@@ -7,6 +7,9 @@ cd "$(dirname "$0")/.."
 # name  height  faces  proportions (fractions of the height, see tools/rig.py)
 CAST=(
   "chonk    1.8  30000 hip=0.36,head=0.68,leg=0.27,knee=0.13"
+  "chonk-tripo 1.8 30000 hip=0.36,head=0.68,leg=0.27,knee=0.13"
+  "chonk-meshy 1.8 30000 hip=0.36,head=0.68,leg=0.27,knee=0.13"
+  "chonk-open  1.8 30000 hip=0.36,head=0.68,leg=0.27,knee=0.13"
   "tiger    2.3  30000 hip=0.46,head=0.79,leg=0.43,knee=0.22,sh=0.71"
   "wolf     1.95 26000 hip=0.46,head=0.74,leg=0.43,knee=0.22,sh=0.66"
   "tortoise 1.75 26000 hip=0.24,head=0.55,leg=0.2,knee=0.1,sh=0.45"

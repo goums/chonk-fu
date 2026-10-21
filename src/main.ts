@@ -5,7 +5,8 @@ import { FollowCamera } from './game/camera';
 import { Game } from './game/game';
 import { buildCharacter, type CharacterKind } from './chonk/characters';
 import { Animator } from './chonk/animator';
-import { preloadModels } from './chonk/gltfRig';
+import { preloadModels, rigFromModel } from './chonk/gltfRig';
+import { groundAt } from './world/world';
 import { Hud } from './ui/hud';
 import { buildSky } from './world/sky';
 import { buildWorld } from './world/world';
@@ -30,10 +31,41 @@ const { sun, water, grass } = buildWorld(scene);
   scene.environmentIntensity = 0.6;
 }
 
-await preloadModels(['chonk', 'tiger', 'wolf', 'tortoise', 'duck', 'pig', 'bunny']);
+const COMPARE = new URLSearchParams(location.search).has('compare');
+await preloadModels(['chonk', 'tiger', 'wolf', 'tortoise', 'duck', 'pig', 'bunny', ...(COMPARE ? ['chonk-tripo', 'chonk-meshy', 'chonk-open'] : [])]);
 const game = new Game(scene);
 const hud = new Hud(document.getElementById('hud')!, game);
 const lineup: (() => void)[] = [];
+// ?compare: the three Le Chonk candidates side by side; keys 1/2/3 swap the playable one
+if (COMPARE) {
+  const variants = ['chonk-tripo', 'chonk-meshy', 'chonk-open'];
+  const labels = ['TRIPO', 'MESHY', 'OPEN'];
+  variants.forEach((v, i) => {
+    const rig = rigFromModel(v);
+    if (!rig) return;
+    const x = game.player.pos.x + (i - 1) * 2.4, z = game.player.pos.z - 3;
+    rig.root.position.set(x, groundAt(x, z), z);
+    scene.add(rig.root);
+    const a = new Animator(rig);
+    lineup.push(() => a.update({ t: performance.now() / 1000, speed: 0, grounded: true, vy: 0, move: null, moveT: 0, hurtT: Infinity, ko: false, angry: false }, 1 / 60));
+    const cv = document.createElement('canvas');
+    cv.width = 256; cv.height = 64;
+    const g = cv.getContext('2d')!;
+    g.fillStyle = 'rgba(43,29,23,0.8)'; g.fillRect(0, 0, 256, 64);
+    g.font = '700 40px Fredoka, sans-serif'; g.fillStyle = '#ffe14a'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(`${i + 1} · ${labels[i]}`, 128, 34);
+    const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false }));
+    tag.scale.set(1.2, 0.3, 1);
+    tag.position.y = 2.3;
+    rig.root.add(tag);
+  });
+  addEventListener('keydown', (e) => {
+    const i = ['Digit1', 'Digit2', 'Digit3'].indexOf(e.code);
+    if (i < 0) return;
+    const rig = rigFromModel(variants[i]);
+    if (rig) game.player.swapRig(rig);
+  });
+}
 // ?lineup: the whole cast next to Le Chonk (art check)
 if (new URLSearchParams(location.search).has('lineup')) {
   (['tortoise', 'wolf', 'tiger', 'duck', 'pig', 'bunny'] as CharacterKind[]).forEach((k, i) => {

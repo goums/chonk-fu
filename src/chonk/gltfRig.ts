@@ -23,6 +23,9 @@ export interface ModelInfo {
 }
 const INFO: Record<string, ModelInfo> = {
   chonk: { fur: { shells: 10, len: 0.028 } }, // the Tripo-based mesh has its own tail
+  'chonk-tripo': { fur: { shells: 10, len: 0.028 } },
+  'chonk-meshy': { fur: { shells: 10, len: 0.028 } },
+  'chonk-open': { fur: { shells: 10, len: 0.028 } },
   tiger: { fur: { shells: 8, len: 0.022 } },
   wolf: { fur: { shells: 8, len: 0.03 } },
   bunny: { fur: { shells: 8, len: 0.025 } },

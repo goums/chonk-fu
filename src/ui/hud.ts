@@ -69,7 +69,7 @@ export class Hud {
     this.dlgText = el('div', 'dlg-text', this.dialog);
     this.dlgDot = el('div', 'dlg-next', this.dialog, 'E ▸');
 
-    el('div', 'help', root, '<b>WASD</b> move · <b>Mouse</b> look · <b>Space</b> jump · <b>J</b>/click punch · <b>K</b> kick · <b>L</b> belly bump · <b>E</b> talk · <b>Shift</b> walk');
+    el('div', 'help', root, '<b>Arrows</b> move · <b>Mouse</b> look · <b>Space</b> jump · <b>J</b>/click punch · <b>K</b> kick · <b>L</b> belly bump · <b>E</b> talk · <b>Shift</b> walk');
     this.end = el('div', 'end', root);
   }
 

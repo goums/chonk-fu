@@ -50,6 +50,14 @@ export class Fighter {
   get object() {
     return this.rig.root;
   }
+  /** replace the character model (same joint layout), e.g. to compare art variants */
+  swapRig(rig: ChonkRig) {
+    const parent = this.rig.root.parent;
+    parent?.remove(this.rig.root);
+    this.rig = rig;
+    this.anim = new Animator(rig);
+    parent?.add(rig.root);
+  }
   get alive() {
     return !this.ko;
   }
