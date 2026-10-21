@@ -22,10 +22,12 @@ export interface ModelInfo {
   fur?: { shells: number; len: number };
 }
 const INFO: Record<string, ModelInfo> = {
-  chonk: { fur: { shells: 10, len: 0.028 } }, // the Tripo-based mesh has its own tail
-  'chonk-tripo': { fur: { shells: 10, len: 0.028 } },
-  'chonk-meshy': { fur: { shells: 10, len: 0.028 } },
-  'chonk-open': { fur: { shells: 10, len: 0.028 } },
+  chonk: {}, // the Tripo-based mesh has its own tail
+  // comparison variants: the generators' own clean textures, no shell fur (it read as grainy noise)
+  'chonk-tripo': {},
+  'chonk-meshy': {},
+  'chonk-open': { tail: { colors: [0xe8893a, 0xb85a1c], r: 0.085, segments: 7 } },
+  'chonk-hunyuan': {},
   tiger: { fur: { shells: 8, len: 0.022 } },
   wolf: { fur: { shells: 8, len: 0.03 } },
   bunny: { fur: { shells: 8, len: 0.025 } },

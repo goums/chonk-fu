@@ -4,12 +4,13 @@
 #   raw meshes: python tools/to3d.py art/concept/<concept>.png <name> 100000 1536
 set -euo pipefail
 cd "$(dirname "$0")/.."
-# name  height  faces  proportions (fractions of the height, see tools/rig.py)
+# name  height  faces  proportions (fractions of the height, see tools/rig.py)  [source mesh]
 CAST=(
   "chonk    1.8  30000 hip=0.36,head=0.68,leg=0.27,knee=0.13"
-  "chonk-tripo 1.8 30000 hip=0.36,head=0.68,leg=0.27,knee=0.13"
-  "chonk-meshy 1.8 30000 hip=0.36,head=0.68,leg=0.27,knee=0.13"
-  "chonk-open  1.8 30000 hip=0.36,head=0.68,leg=0.27,knee=0.13"
+  "chonk-tripo 1.8 30000 hip=0.36,head=0.68,leg=0.27,knee=0.13 art/models/tripo-2-5-chonk.glb"
+  "chonk-meshy 1.8 30000 hip=0.36,head=0.68,leg=0.27,knee=0.13 art/models/meshy-6-1-chonk.glb"
+  "chonk-open  1.8 30000 hip=0.36,head=0.68,leg=0.27,knee=0.13 art/models/chonk-a.glb"
+  "chonk-hunyuan 1.8 30000 hip=0.36,head=0.68,leg=0.27,knee=0.13 art/models/chonk-hy.glb"
   "tiger    2.3  30000 hip=0.46,head=0.79,leg=0.43,knee=0.22,sh=0.71"
   "wolf     1.95 26000 hip=0.46,head=0.74,leg=0.43,knee=0.22,sh=0.66"
   "tortoise 1.75 26000 hip=0.24,head=0.55,leg=0.2,knee=0.1,sh=0.45"
@@ -19,13 +20,14 @@ CAST=(
 )
 mkdir -p public/models
 for row in "${CAST[@]}"; do
-  read -r name height faces props <<<"$row"
+  read -r name height faces props explicit <<<"$row"
   if [ $# -gt 0 ] && [[ ! " $* " =~ " $name " ]]; then continue; fi
-  [ -f "art/models/$name.glb" ] || [ -f "art/refined/$name.glb" ] || { echo "skip $name (no source mesh)"; continue; }
+  [ -n "${explicit:-}" ] || [ -f "art/models/$name.glb" ] || [ -f "art/refined/$name.glb" ] || { echo "skip $name (no source mesh)"; continue; }
   src="art/models/$name.glb"
   # refined meshes (tools/refine.py) win over raw generator output
   [ -f "art/refined/$name.glb" ] && src="art/refined/$name.glb"
   [ "$name" = chonk ] && [ ! -f "$src" ] && src="art/models/chonk-a.glb"
+  [ -n "${explicit:-}" ] && src="$explicit"
   tmp="$(mktemp -d)"
   blender -b -P tools/rig.py -- "$src" "$tmp/rigged.glb" "$height" "$faces" "${PREVIEW:--}${PREVIEW:+/$name}" "$props" 2>&1 | grep -E "PARTS|SKIN|EXPORTED"
   # meshoptimizer simplification to ~$faces triangles, then 1024 px textures

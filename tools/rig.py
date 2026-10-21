@@ -84,6 +84,13 @@ print(f"PARTS {len(parts)} main={len(main)} dropped_verts={len(drop)}")
 bmesh.ops.delete(bm, geom=list(set(drop)), context="VERTS")
 bm.to_mesh(body.data)
 bm.free()
+# smooth shading: drop imported (sometimes hard-edged, faceted) normals
+bpy.ops.object.select_all(action="DESELECT")
+body.select_set(True)
+bpy.context.view_layer.objects.active = body
+if body.data.has_custom_normals:
+    bpy.ops.mesh.customdata_custom_splitnormals_clear()
+bpy.ops.object.shade_smooth()
 
 # ---- normalise: feet on the ground, centered, `HEIGHT` tall, facing -Y (glTF +Z) ----
 def bounds(o):

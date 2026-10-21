@@ -32,18 +32,18 @@ const { sun, water, grass } = buildWorld(scene);
 }
 
 const COMPARE = new URLSearchParams(location.search).has('compare');
-await preloadModels(['chonk', 'tiger', 'wolf', 'tortoise', 'duck', 'pig', 'bunny', ...(COMPARE ? ['chonk-tripo', 'chonk-meshy', 'chonk-open'] : [])]);
+await preloadModels(['chonk', 'tiger', 'wolf', 'tortoise', 'duck', 'pig', 'bunny', ...(COMPARE ? ['chonk-tripo', 'chonk-meshy', 'chonk-open', 'chonk-hunyuan'] : [])]);
 const game = new Game(scene);
 const hud = new Hud(document.getElementById('hud')!, game);
 const lineup: (() => void)[] = [];
 // ?compare: the three Le Chonk candidates side by side; keys 1/2/3 swap the playable one
 if (COMPARE) {
-  const variants = ['chonk-tripo', 'chonk-meshy', 'chonk-open'];
-  const labels = ['TRIPO', 'MESHY', 'OPEN'];
+  const variants = ['chonk-tripo', 'chonk-meshy', 'chonk-open', 'chonk-hunyuan'];
+  const labels = ['TRIPO', 'MESHY', 'OPEN', 'HUNYUAN'];
   variants.forEach((v, i) => {
     const rig = rigFromModel(v);
     if (!rig) return;
-    const x = game.player.pos.x + (i - 1) * 2.4, z = game.player.pos.z - 3;
+    const x = game.player.pos.x + (i - 1.5) * 2.4, z = game.player.pos.z - 3;
     rig.root.position.set(x, groundAt(x, z), z);
     scene.add(rig.root);
     const a = new Animator(rig);
@@ -60,7 +60,7 @@ if (COMPARE) {
     rig.root.add(tag);
   });
   addEventListener('keydown', (e) => {
-    const i = ['Digit1', 'Digit2', 'Digit3'].indexOf(e.code);
+    const i = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(e.code);
     if (i < 0) return;
     const rig = rigFromModel(variants[i]);
     if (rig) game.player.swapRig(rig);
