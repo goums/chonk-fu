@@ -126,7 +126,7 @@ function palaceHall(w: number, d: number) {
   b.add(box(w + 0.4, 0.3, d + 0.4), C.jadeB, 0, plat + wh - 0.75, 0);
   // golden plaque
   b.add(box(3.4, 1.3, 0.2), C.gold, 0, plat + wh + 0.9, d / 2 + 0.6);
-  b.add(box(3.0, 1.0, 0.22), C.under, 0, plat + wh + 0.9, d / 2 + 0.62);
+  b.add(box(3.0, 1.0, 0.1), C.under, 0, plat + wh + 0.9, d / 2 + 0.74);
   // lower roof
   let y = plat + wh;
   b.add(roofGeometry(w + 5, d + 5, 1.6, 1.3, C.gold, 0xd4a22e, C.under, 0.35), null, 0, y, 0);
@@ -153,7 +153,7 @@ function gate(w: number, h: number) {
   b.add(box(w * 0.4, 0.4, 0.45), C.beam, 0, h + 0.6, 0);
   b.add(box(w * 0.32 + 0.4, 0.4, 0.45), C.jadeB, 0, h - 1.4, 0);
   b.add(box(2.4, 1.1, 0.2), C.gold, 0, h + 0.05, 0.05);
-  b.add(box(2.1, 0.85, 0.22), C.under, 0, h + 0.05, 0.06);
+  b.add(box(2.1, 0.85, 0.1), C.under, 0, h + 0.05, 0.18);
   b.add(roofGeometry(w * 0.42, 1.8, 0.9, 0.9, C.jadeA, C.jadeB, C.under), null, 0, h + 0.85, 0);
   for (const s of [-1, 1]) b.add(roofGeometry(w * 0.4, 1.6, 0.7, 0.8, C.jadeA, C.jadeB, C.under), null, (s * w) / 3, h - 0.3, 0);
   return b.geometry();

@@ -21,7 +21,7 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 3000);
+const camera = new THREE.PerspectiveCamera(55, 1, 0.3, 2400);
 const { sun, water, grass } = buildWorld(scene);
 // image-based lighting from the sky, so PBR materials pick up the warm valley ambience
 {

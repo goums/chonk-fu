@@ -99,7 +99,7 @@ export function roofGeometry(w: number, d: number, h: number, curl: number, tile
     return h * Math.max(0, s) ** 1.55 + lift;
   };
   const pos: number[] = [], col: number[] = [];
-  const cA = new THREE.Color(tileA), cB = new THREE.Color(tileB), cU = new THREE.Color(under);
+  const cA = new THREE.Color(tileA), cB = new THREE.Color(tileA).lerp(new THREE.Color(tileB), 0.55), cU = new THREE.Color(under);
   const push = (c: THREE.Color, ...pts: number[][]) => {
     for (const p of pts) { pos.push(p[0], p[1], p[2]); col.push(c.r, c.g, c.b); }
   };
