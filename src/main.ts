@@ -3,6 +3,8 @@ import { Input, emptyIntent, type Intent } from './core/input';
 import { createPost } from './core/post';
 import { FollowCamera } from './game/camera';
 import { Game } from './game/game';
+import { buildCharacter, type CharacterKind } from './chonk/characters';
+import { Animator } from './chonk/animator';
 import { preloadModels } from './chonk/gltfRig';
 import { Hud } from './ui/hud';
 import { buildSky } from './world/sky';
@@ -31,6 +33,18 @@ const { sun, water, grass } = buildWorld(scene);
 await preloadModels(['chonk', 'tiger', 'wolf', 'tortoise', 'duck', 'pig', 'bunny']);
 const game = new Game(scene);
 const hud = new Hud(document.getElementById('hud')!, game);
+const lineup: (() => void)[] = [];
+// ?lineup: the whole cast next to Le Chonk (art check)
+if (new URLSearchParams(location.search).has('lineup')) {
+  (['tortoise', 'wolf', 'tiger', 'duck', 'pig', 'bunny'] as CharacterKind[]).forEach((k, i) => {
+    const rig = buildCharacter(k);
+    const x = game.player.pos.x + (i < 3 ? -1 : 1) * (1.8 + (i % 3) * 1.6), z = game.player.pos.z;
+    rig.root.position.set(x, game.player.pos.y, z);
+    scene.add(rig.root);
+    const a = new Animator(rig);
+    lineup.push(() => a.update({ t: performance.now() / 1000, speed: 0, grounded: true, vy: 0, move: null, moveT: 0, hurtT: Infinity, ko: false, angry: false }, 1 / 60));
+  });
+}
 const post = new URLSearchParams(location.search).has('nopost') ? null : createPost(renderer, scene, camera);
 const input = new Input(canvas);
 const follow = new FollowCamera(camera);
@@ -80,6 +94,7 @@ function frame(now: number) {
   sun.target.position.copy(P.pos);
   water.update(time);
   grass.update(time);
+  for (const f of lineup) f();
   hud.update(real, follow.yaw);
   game.events.length = 0;
   if (post) post.render();

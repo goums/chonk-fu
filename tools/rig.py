@@ -1,6 +1,9 @@
 """Rig an AI-generated character mesh for the game, headless in Blender.
 
-usage: blender -b -P tools/rig.py -- in.glb out.glb [height=1.8] [faces=30000] [preview_prefix]
+usage: blender -b -P tools/rig.py -- in.glb out.glb [height=1.8] [faces=30000] [preview_prefix|-] [proportions]
+
+proportions: joint heights as fractions of the total height, e.g. "hip=0.45,head=0.78,leg=0.42,knee=0.22,sh=0.72"
+(defaults fit Le Chonk; `sh` = shoulder height, automatic from the paws when omitted)
 
 1. keep the main body (drops floating fragments such as a detached tail), scale to `height`, feet at 0
 2. decimate to about `faces` triangles (textures and UVs kept)
@@ -22,7 +25,12 @@ argv = sys.argv[sys.argv.index("--") + 1:]
 SRC, OUT = argv[0], argv[1]
 HEIGHT = float(argv[2]) if len(argv) > 2 else 1.8
 FACES = int(argv[3]) if len(argv) > 3 else 30000
-PREVIEW = argv[4] if len(argv) > 4 else None
+PREVIEW = argv[4] if len(argv) > 4 and argv[4] != "-" else None
+R = {"hip": 0.36, "head": 0.68, "leg": 0.27, "knee": 0.13, "sh": 0.0}
+if len(argv) > 5:
+    for kv in argv[5].split(","):
+        k, v = kv.split("=")
+        R[k] = float(v)
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 bpy.ops.import_scene.gltf(filepath=SRC)
@@ -88,12 +96,8 @@ for v in body.data.vertices:
     v.co = Vector(((v.co.x - (lo.x + hi.x) / 2) * s, (v.co.y - (lo.y + hi.y) / 2) * s, (v.co.z - lo.z) * s))
 body.data.update()
 
-# ---- 2. decimate ----
-tris = sum(len(p.vertices) - 2 for p in body.data.polygons)
-if tris > FACES:
-    m = body.modifiers.new("dec", "DECIMATE")
-    m.ratio = FACES / tris
-    bpy.ops.object.modifier_apply(modifier="dec")
+# ---- 2. no decimation here: Blender's collapse tears generated meshes. tools/build-cast.sh simplifies
+# the exported GLB with meshoptimizer instead (vertex removal only: UVs and skin weights stay intact).
 tris = sum(len(p.vertices) - 2 for p in body.data.polygons)
 print("TRIS", tris)
 
@@ -116,23 +120,23 @@ def half_width(z0, z1, xs_max):
     sl = [abs(v.x) for v in V if z0 <= v.z <= z1 and abs(v.x) < xs_max]
     return max(sl) if sl else 0.2 * H
 paw_z = (pawL.z + pawR.z) / 2
-sh_z = min(paw_z + 0.17 * H, 0.66 * H)
+sh_z = R["sh"] * H if R["sh"] else min(paw_z + 0.17 * H, 0.66 * H)
 sh_x = half_width(sh_z - 0.02 * H, sh_z + 0.02 * H, (abs(pawL.x) + abs(pawR.x)) / 2 * 0.62) * 0.78
 J = {
-    "hips": Vector((0, 0, 0.36 * H)),
-    "body": Vector((0, 0, 0.36 * H)),
-    "head": Vector((0, 0, 0.68 * H)),
+    "hips": Vector((0, 0, R["hip"] * H)),
+    "body": Vector((0, 0, R["hip"] * H)),
+    "head": Vector((0, 0, R["head"] * H)),
     "shoulderL": Vector((sh_x, (pawL.y + 0) / 2 * 0.4, sh_z)),
     "shoulderR": Vector((-sh_x, (pawR.y + 0) / 2 * 0.4, sh_z)),
-    "legL": Vector((footL.x * 0.95, 0, 0.27 * H)),
-    "legR": Vector((footR.x * 0.95, 0, 0.27 * H)),
-    "kneeL": Vector((footL.x, footL.y * 0.3, 0.13 * H)),
-    "kneeR": Vector((footR.x, footR.y * 0.3, 0.13 * H)),
+    "legL": Vector((footL.x * 0.95, 0, R["leg"] * H)),
+    "legR": Vector((footR.x * 0.95, 0, R["leg"] * H)),
+    "kneeL": Vector((footL.x, footL.y * 0.3, R["knee"] * H)),
+    "kneeR": Vector((footR.x, footR.y * 0.3, R["knee"] * H)),
 }
 J["elbowL"] = J["shoulderL"].lerp(pawL, 0.55)
 J["elbowR"] = J["shoulderR"].lerp(pawR, 0.55)
-back_y = max(v.y for v in V if abs(v.x) < 0.1 * H and 0.28 * H < v.z < 0.36 * H)
-J["tail0"] = Vector((0, back_y, 0.3 * H))
+back_y = max(v.y for v in V if abs(v.x) < 0.1 * H and (R["hip"] - 0.08) * H < v.z < R["hip"] * H)
+J["tail0"] = Vector((0, back_y, (R["hip"] - 0.06) * H))
 TAILS = {
     "hips": J["hips"] + Vector((0, 0, 0.08 * H)),
     "body": J["head"],

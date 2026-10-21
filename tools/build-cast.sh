@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Rebuild the rigged cast (public/models/*.glb) from the raw TRELLIS.2 meshes in art/models/.
+# usage: tools/build-cast.sh [name...]
+#   raw meshes: python tools/to3d.py art/concept/<concept>.png <name> 100000 1536
+set -euo pipefail
+cd "$(dirname "$0")/.."
+# name  height  faces  proportions (fractions of the height, see tools/rig.py)
+CAST=(
+  "chonk    1.8  30000 hip=0.36,head=0.68,leg=0.27,knee=0.13"
+  "tiger    2.3  30000 hip=0.46,head=0.79,leg=0.43,knee=0.22,sh=0.71"
+  "wolf     1.95 26000 hip=0.46,head=0.74,leg=0.43,knee=0.22,sh=0.66"
+  "tortoise 1.75 26000 hip=0.24,head=0.55,leg=0.2,knee=0.1,sh=0.45"
+  "duck     1.6  22000 hip=0.24,head=0.55,leg=0.2,knee=0.1,sh=0.45"
+  "pig      1.45 22000 hip=0.3,head=0.62,leg=0.25,knee=0.12,sh=0.5"
+  "bunny    1.5  22000 hip=0.25,head=0.55,leg=0.21,knee=0.1,sh=0.44"
+)
+mkdir -p public/models
+for row in "${CAST[@]}"; do
+  read -r name height faces props <<<"$row"
+  if [ $# -gt 0 ] && [[ ! " $* " =~ " $name " ]]; then continue; fi
+  [ -f "art/models/$name.glb" ] || { echo "skip $name (no art/models/$name.glb)"; continue; }
+  src="art/models/$name.glb"; [ "$name" = chonk ] && src="art/models/chonk-a.glb"
+  tmp="$(mktemp -d)"
+  blender -b -P tools/rig.py -- "$src" "$tmp/rigged.glb" "$height" "$faces" "${PREVIEW:--}${PREVIEW:+/$name}" "$props" 2>&1 | grep -E "PARTS|SKIN|EXPORTED"
+  # meshoptimizer simplification to ~$faces triangles, then 1024 px textures
+  tris=$(python3 -c "import json,struct;b=open('$tmp/rigged.glb','rb').read();n=struct.unpack('<I',b[12:16])[0];j=json.loads(b[20:20+n]);print(sum(j['accessors'][p['indices']]['count']//3 for m in j['meshes'] for p in m['primitives']))")
+  ratio=$(python3 -c "print(min(1, $faces / $tris))")
+  npx gltf-transform weld "$tmp/rigged.glb" "$tmp/welded.glb" >/dev/null
+  npx gltf-transform simplify "$tmp/welded.glb" "$tmp/simple.glb" --ratio "$ratio" --error 0.01 >/dev/null
+  npx gltf-transform resize "$tmp/simple.glb" "public/models/$name.glb" --width 1024 --height 1024 >/dev/null
+  echo "$name: $tris -> ~$faces tris, $(du -h "public/models/$name.glb" | cut -f1)"
+  rm -rf "$tmp"
+done
