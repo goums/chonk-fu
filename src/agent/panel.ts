@@ -1,8 +1,9 @@
-// The "Mistral plays" panel (?agent): start a live run, watch each thought and action, replay a recorded run,
+// The "Mistral plays" panel (bottom right): start a live run, watch each thought and action, replay a recorded run,
 // and see the completion stats at the end.
 import './agent.css';
 import type { Game } from '../game/game';
 import { Agent, type RunFile, type RunStats, type TurnRecord } from './agent';
+import { GITHUB_MARK, MISTRAL_M } from '../ui/icons';
 
 const MODELS = [
   { provider: 'mistral', id: 'mistral-large-4', label: 'Mistral Large 4' },
@@ -47,13 +48,17 @@ export class AgentPanel {
 
   constructor(private game: Game, private onRun: (a: Agent | null) => void) {
     const el = (this.el = document.createElement('div'));
-    el.className = 'ag-panel hidden';
+    el.className = 'ag-panel folded';
     el.innerHTML = `
-      <div class="ag-head"><span class="ag-dot"></span><b>Mistral plays</b><button class="ag-min" title="Fold">–</button><button class="ag-close" title="Close">×</button></div>
+      <div class="ag-head">
+        <button class="hud-btn ag-play" title="Mistral plays the game for you">${MISTRAL_M}<span>Let Chonk play</span></button>
+        <span class="ag-sound">Click for music</span>
+        <a class="hud-btn icon" href="https://github.com/goums/chonk-fu" target="_blank" rel="noopener" title="Source code on GitHub">${GITHUB_MARK}</a>
+        <button class="ag-min" title="Show / hide the AI log">▴</button>
+      </div>
       <div class="ag-body">
         <div class="ag-row">
-          <select class="ag-model-sel">${MODELS.map((m) => `<option value="${m.id}">${m.label}</option>`).join('')}</select>
-          <button class="ag-go">Play</button>
+          <select class="ag-model-sel" title="Model">${MODELS.map((m) => `<option value="${m.id}">${m.label}</option>`).join('')}</select>
         </div>
         ${import.meta.env.DEV ? '' : '<div class="ag-row"><input class="ag-key" type="password" placeholder="Mistral API key (stays in this browser)" /></div>'}
         <div class="ag-row">
@@ -70,12 +75,17 @@ export class AgentPanel {
     if (keyEl) try { keyEl.value = localStorage.getItem('chonk-fu-key') ?? ''; } catch { /* private mode */ }
     this.status = el.querySelector('.ag-status')!;
     this.now = el.querySelector('.ag-now')!;
-    el.querySelector('.ag-min')!.addEventListener('click', () => el.classList.toggle('folded'));
-    el.querySelector('.ag-close')!.addEventListener('click', () => {
-      this.stop();
-      el.classList.add('hidden');
+    const min = el.querySelector<HTMLButtonElement>('.ag-min')!;
+    min.addEventListener('click', () => (el.classList.contains('folded') ? this.show() : this.fold()));
+    const play = el.querySelector<HTMLButtonElement>('.ag-play')!;
+    play.addEventListener('click', () => {
+      play.blur(); // Space / Enter must not press it again
+      if (this.agent) this.stop();
+      else {
+        this.show();
+        this.start(null);
+      }
     });
-    el.querySelector('.ag-go')!.addEventListener('click', () => (this.agent ? this.stop() : this.start(null)));
     el.querySelectorAll<HTMLButtonElement>('.ag-speed button').forEach((b) =>
       b.addEventListener('click', () => {
         this.speed = +b.dataset.s!;
@@ -101,8 +111,27 @@ export class AgentPanel {
     el.addEventListener('keydown', (e) => e.stopPropagation());
   }
 
+  /** unfold the log */
   show() {
-    this.el.classList.remove('hidden');
+    this.el.classList.remove('folded');
+    this.el.querySelector('.ag-min')!.textContent = '▾';
+  }
+
+  fold() {
+    this.el.classList.add('folded');
+    this.el.querySelector('.ag-min')!.textContent = '▴';
+  }
+
+  /** browsers keep the music off after a page load until a click: say so while the AI plays */
+  soundHint(show: boolean) {
+    this.el.classList.toggle('mute', show);
+  }
+
+  private setPlaying(on: boolean) {
+    const b = this.el.querySelector('.ag-play')!;
+    b.classList.toggle('on', on);
+    b.querySelector('span')!.textContent = on ? 'Take control' : 'Let Chonk play';
+    this.el.classList.toggle('running', on);
   }
 
   /**
@@ -133,8 +162,7 @@ export class AgentPanel {
     const a = (this.agent = new Agent(this.game, replay ? { provider: replay.provider, model: replay.model } : { provider: m.provider, model: m.id, apiKey, maxTurns: +(new URLSearchParams(location.search).get('turns') ?? 160), maxCost: +(new URLSearchParams(location.search).get('maxcost') ?? 1) }, replay, new URLSearchParams(location.search).has('headless')));
     a.speed = this.speed;
     this.onRun(a);
-    this.el.classList.add('running');
-    this.el.querySelector('.ag-go')!.textContent = 'Stop';
+    this.setPlaying(true);
     this.log.innerHTML = '';
     this.setStatus(replay ? `Replay · ${replay.model}` : `${m.label} is playing`);
     a.onThink = () => this.setStatus(`${a.cfg.model} is thinking… · turn ${a.turns.length + 1} · $${a.usage.cost.toFixed(3)}`);
@@ -151,8 +179,7 @@ export class AgentPanel {
     if (!replay && fresh) this.offerDownload(run);
     this.agent = null;
     this.onRun(null);
-    this.el.classList.remove('running');
-    this.el.querySelector('.ag-go')!.textContent = 'Play';
+    this.setPlaying(false);
   }
 
   stop() {

@@ -12,6 +12,7 @@ import { GameAudio } from './audio';
 import { buildSky } from './world/sky';
 import { buildWorld } from './world/world';
 import type { Agent } from './agent/agent';
+import { AgentPanel } from './agent/panel';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
@@ -101,26 +102,16 @@ const params = new URLSearchParams(location.search);
 /** headless AI runs: no rendering, the sim runs as fast as it can */
 const HEADLESS = params.has('headless');
 let agent: Agent | null = null;
-let panel: import('./agent/panel').AgentPanel | null = null;
-/** the AI panel, created on first use (the "Let Chonk play" button or ?agent) */
-async function openPanel() {
-  if (!panel) {
-    const { AgentPanel } = await import('./agent/panel');
-    panel = new AgentPanel(game, (a) => {
-      agent = a;
-      external.active = !!a;
-      hud.setAgent(!!a);
-    });
-    if (HEADLESS) panel.el.style.display = 'none';
-    Object.assign(window, { chonkPanel: panel });
-  }
+// the "Mistral plays" panel, bottom right: Let Chonk play / Take control, replays, the run log
+const panel = new AgentPanel(game, (a) => {
+  agent = a;
+  external.active = !!a;
+});
+if (HEADLESS) panel.el.style.display = 'none';
+Object.assign(window, { chonkPanel: panel });
+const openPanel = async () => {
   panel.show();
   return panel;
-}
-hud.onAgent = async () => {
-  const p = await openPanel();
-  if (agent) p.stop();
-  else p.start(null);
 };
 if (params.has('agent') || params.has('replay') || params.has('play')) {
   const p = await openPanel();
@@ -171,6 +162,7 @@ function frame(now: number) {
   grass.update(time);
   for (const f of lineup) f();
   audio.update(game, real, follow.yaw); // reads this frame's game.events before they are cleared
+  panel.soundHint(!!agent && !audio.muted && audio.ctx?.state !== 'running');
   hud.update(real, follow.yaw);
   game.events.length = 0;
   if (post) post.render();
@@ -180,4 +172,4 @@ function frame(now: number) {
 requestAnimationFrame(frame);
 
 // debug handle for development and the agent harness
-Object.assign(window, { chonk: { game, player: game.player, follow, scene, camera, renderer, THREE, post, tick, external, agent: () => agent } });
+Object.assign(window, { chonk: { game, player: game.player, follow, scene, camera, renderer, THREE, post, tick, external, audio, agent: () => agent } });
