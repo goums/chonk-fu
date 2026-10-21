@@ -325,7 +325,7 @@ kbd.wide { padding: 0 0.65em; letter-spacing: 0.04em; }
 .end button:hover { background: var(--gold); color: #120f08; box-shadow: 0 0 24px rgba(217, 181, 106, 0.5); }
 .seal-end { position: absolute; right: 6px; bottom: 18px; width: 44px; height: 44px; font-size: 32px; transform: rotate(-8deg); animation: stamp 0.6s 3s cubic-bezier(0.3, 1.6, 0.5, 1) both; }
 
-/* ---------- top-right buttons: let the AI play, source code ---------- */
+/* ---------- buttons: let the AI play (under the vitals), source code (top right) ---------- */
 .hud-actions { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 14px; pointer-events: auto; }
 .hud-btn {
   display: inline-flex; align-items: center; gap: 8px; cursor: pointer; text-decoration: none;
@@ -337,6 +337,7 @@ kbd.wide { padding: 0 0.65em; letter-spacing: 0.04em; }
 .hud-btn:focus-visible { outline: 1px solid var(--gold-hi); outline-offset: 2px; }
 .hud-btn .seal { width: 17px; height: 17px; font-size: 13px; letter-spacing: 0; }
 .hud-btn.icon { padding: 6px 8px; }
+.agent-btn { align-self: flex-start; margin-top: 4px; pointer-events: auto; }
 .hud-btn.on { color: var(--jade-hi); border-color: var(--jade); animation: btnGlow 1.6s ease-in-out infinite; }
 .hud-btn.on:hover { background: var(--jade); color: #06140e; }
 @keyframes btnGlow { 50% { box-shadow: 0 0 16px rgba(79, 211, 154, 0.55); } }

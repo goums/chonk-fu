@@ -161,6 +161,13 @@ export class Hud {
     const row = el('div', 'hp-row', vit);
     this.hpNum = el('span', 'hp-num', row);
     this.bellyTag = el('span', 'belly-tag', row, '<kbd>K</kbd>Belly Jump');
+    // Mistral takes over Le Chonk (and gives him back)
+    this.agentBtn = el('button', 'hud-btn agent-btn', vit, '<i class="seal seal-sm">自</i><span>Let Chonk play</span>');
+    this.agentBtn.title = 'Mistral plays the game for you';
+    this.agentBtn.addEventListener('click', () => {
+      this.agentBtn.blur(); // Space / Enter must not press it again
+      this.onAgent?.();
+    });
 
     // ---- compass
     const compass = el('div', 'compass hud-fade', root);
@@ -169,15 +176,9 @@ export class Hud {
     this.compassTargets = el('div', 'compass-targets hud-fade', root);
     el('div', 'compass-needle', compass);
 
-    // ---- quest tracker, with the "Let Chonk play" (AI) and GitHub buttons on top
+    // ---- quest tracker, with the GitHub button on top
     const q = el('div', 'hud-quest hud-fade', root);
     const acts = el('div', 'hud-actions', q);
-    this.agentBtn = el('button', 'hud-btn', acts, '<i class="seal seal-sm">自</i><span>Let Chonk play</span>');
-    this.agentBtn.title = 'Mistral plays the game for you';
-    this.agentBtn.addEventListener('click', () => {
-      this.agentBtn.blur(); // Space / Enter must not press it again
-      this.onAgent?.();
-    });
     const gh = el('a', 'hud-btn icon', acts, GITHUB_MARK);
     gh.href = 'https://github.com/goums/chonk-fu';
     gh.target = '_blank';
