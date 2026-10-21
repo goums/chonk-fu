@@ -20,6 +20,9 @@ export class GameAudio {
   muted = false;
   /** bus levels; change with setVolume() */
   readonly volumes = { master: 0.9, music: 0.45, sfx: 0.85, ambience: 0.6 };
+  /** hold one music mood, whatever happens in the game (null: the game picks); the video scripts use it */
+  forceMood: Mood | null = null;
+  private out: AudioNode | null = null;
   private bus: Record<'master' | 'music' | 'sfx' | 'ambience', GainNode> | null = null;
   private music: Music | null = null;
   private sfx: Sfx | null = null;
@@ -98,6 +101,14 @@ export class GameAudio {
     } else void this.ctx.resume();
   }
 
+  /** a live copy of the final mix, for recording (the video scripts); null before the audio starts */
+  stream(): MediaStream | null {
+    if (!this.ctx || !this.out) return null;
+    const d = this.ctx.createMediaStreamDestination();
+    this.out.connect(d);
+    return d.stream;
+  }
+
   setVolume(kind: keyof GameAudio['volumes'], v: number) {
     this.volumes[kind] = clamp(v, 0, 1);
     if (!this.bus || !this.ctx) return;
@@ -116,6 +127,7 @@ export class GameAudio {
     comp.attack.value = 0.004;
     comp.release.value = 0.25;
     comp.connect(ctx.destination);
+    this.out = comp;
     const gain = (v: number, to: AudioNode) => {
       const g = ctx.createGain();
       g.gain.value = v;
@@ -188,7 +200,7 @@ export class GameAudio {
     const fighting = !!game.tiger || game.enemies.some((e) => !e.removed && !e.ko && (e.state === 'chase' || e.state === 'fight'));
     this.combatHold = fighting ? 4 : Math.max(0, this.combatHold - dt);
     const nearPalace = Math.hypot(P.pos.x - PALACE_MOUNT.x, P.pos.z - PALACE_MOUNT.z) < PALACE_MOUNT.plateau + 24 && P.pos.y > GROUND + 22;
-    const want: Mood = game.ended ? 'ending' : this.combatHold > 0 ? 'combat' : nearPalace ? 'palace' : 'village';
+    const want: Mood = this.forceMood ?? (game.ended ? 'ending' : this.combatHold > 0 ? 'combat' : nearPalace ? 'palace' : 'village');
     if (want !== this.moodCand) {
       this.moodCand = want;
       this.moodT = 0;
