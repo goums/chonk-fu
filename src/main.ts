@@ -11,6 +11,7 @@ import { Hud } from './ui/hud';
 import { GameAudio } from './audio';
 import { buildSky } from './world/sky';
 import { buildWorld } from './world/world';
+import type { Agent } from './agent/agent';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
@@ -96,6 +97,27 @@ resize();
 
 /** external control (tests, AI harness): when active, the sim only advances through tick() */
 const external = { active: false };
+const params = new URLSearchParams(location.search);
+/** headless AI runs: no rendering, the sim runs as fast as it can */
+const HEADLESS = params.has('headless');
+let agent: Agent | null = null;
+if (params.has('agent')) {
+  const { AgentPanel } = await import('./agent/panel');
+  const panel = new AgentPanel(game, (a) => {
+    agent = a;
+    external.active = !!a;
+  });
+  if (HEADLESS) panel.el.style.display = 'none';
+  const replay = params.get('replay');
+  const play = params.get('play');
+  if (replay) fetch(`./runs/${replay}`).then((r) => r.json()).then((run) => panel.start(run));
+  else if (play) {
+    const sel = panel.el.querySelector<HTMLSelectElement>('.ag-model-sel')!;
+    sel.value = play;
+    panel.start(null);
+  }
+  Object.assign(window, { chonkPanel: panel });
+}
 function tick(n: number, intent: Partial<Intent> = {}) {
   for (let i = 0; i < n; i++) {
     game.step(DT, { ...emptyIntent(), ...(i === 0 ? intent : { ...intent, jump: false, punch: false, kick: false, belly: false, interact: false }) }, follow.yaw);
@@ -110,6 +132,11 @@ function frame(now: number) {
   const real = Math.min((now - last) / 1000, 0.25);
   acc += real;
   last = now;
+  if (HEADLESS) {
+    game.events.length = 0;
+    requestAnimationFrame(frame);
+    return;
+  }
   while (acc >= DT && !external.active) {
     const intent = input.intent();
     input.endFrame();
@@ -142,4 +169,4 @@ function frame(now: number) {
 requestAnimationFrame(frame);
 
 // debug handle for development and the agent harness
-Object.assign(window, { chonk: { game, player: game.player, follow, scene, camera, renderer, THREE, post, tick, external } });
+Object.assign(window, { chonk: { game, player: game.player, follow, scene, camera, renderer, THREE, post, tick, external, agent: () => agent } });
