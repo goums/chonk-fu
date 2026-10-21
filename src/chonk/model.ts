@@ -1,5 +1,6 @@
 // Shared character types and Le Chonk's palette. Characters are sculpted in creature.ts / characters.ts.
 import * as THREE from 'three';
+import type { Face } from './face';
 
 export const FUR = {
   orange: 0xf3922a,
@@ -36,5 +37,7 @@ export interface ChonkRig {
   kneeR: THREE.Group;
   tail: THREE.Group[];
   belly: THREE.Mesh;
+  /** animated eyes / mouth over the painted face (pipeline models, face.ts) */
+  face?: Face | null;
 }
 

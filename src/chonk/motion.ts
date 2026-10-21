@@ -329,6 +329,8 @@ export class Motion implements CharacterAnimator {
         tail[i].rotation.z = lerp(Math.sin(inp.t * (1.3 + run * 4) - i * 0.6) * (0.08 + run * 0.06), Math.sin(this.swimPh * 0.5 - i * 0.7) * 0.2, sw);
       }
     }
+    // eyes and mouth (face.ts)
+    r.face?.update(dt, inp);
   }
 
   /** lowest paw sole height (rig.root space) of the current W pose with the hips at `hips` */

@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { addFurShells } from './creature';
+import { createFace } from './face';
 import type { ChonkRig } from './model';
 
 const PARENT: Record<string, string | null> = {
@@ -196,12 +197,14 @@ export function rigFromModel(name: string): ChonkRig | null {
       parent = seg;
     }
   }
+  // animated eyes and mouth over the painted ones (bind pose: before any animation)
+  const face = createFace(name, mesh, B.head, mat);
   const G = (b: THREE.Bone) => b as unknown as THREE.Group;
   return {
     root, hipBase: W.hips.y, hips: G(B.hips), body: G(B.body), head: G(B.head),
     browL: dummy(), browR: dummy(), mouth: dummy(),
     shoulderL: G(B.shoulderL), shoulderR: G(B.shoulderR), elbowL: G(B.elbowL), elbowR: G(B.elbowR),
     legL: G(B.legL), legR: G(B.legR), kneeL: G(B.kneeL), kneeR: G(B.kneeR),
-    tail: tail as THREE.Group[], belly: mesh as unknown as THREE.Mesh,
+    tail: tail as THREE.Group[], belly: mesh as unknown as THREE.Mesh, face,
   };
 }

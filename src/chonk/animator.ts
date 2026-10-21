@@ -157,6 +157,7 @@ export class Animator {
     }
 
     this.apply(P, dt, inp.move ? 26 : 14);
+    this.rig.face?.update(dt, inp);
   }
 
   private applyMove(P: Pose, move: MoveName, u: number) {
