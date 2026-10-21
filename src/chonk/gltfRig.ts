@@ -82,6 +82,28 @@ export async function preloadModels(names: string[]) {
 }
 export const hasModel = (n: string) => loaded.has(n);
 
+/**
+ * Generated PBR materials come out plastic: a little metalness and low roughness everywhere. Fur and
+ * cloth are never metallic and scatter light softly: drop the metal/roughness map, go rough, lower the
+ * specular, and add a warm velvet sheen at grazing angles (the real-time stand-in for backlit fur).
+ */
+function furLook(src: THREE.MeshStandardMaterial) {
+  const m = new THREE.MeshPhysicalMaterial({
+    map: src.map,
+    normalMap: src.normalMap,
+    normalScale: new THREE.Vector2(0.7, 0.7),
+    roughness: 0.9,
+    metalness: 0,
+    specularIntensity: 0.3,
+    sheen: 0.8,
+    sheenRoughness: 0.75,
+    sheenColor: new THREE.Color(0xffd6a8),
+    envMapIntensity: 0.55,
+    side: src.side,
+  });
+  return m;
+}
+
 /** Euler (XYZ) that turns the rest direction (0,-1,0) into `dir`, with no twist */
 function hangRotation(dir: THREE.Vector3) {
   const d = dir.clone().normalize();
@@ -142,9 +164,8 @@ export function rigFromModel(name: string): ChonkRig | null {
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   mesh.frustumCulled = false;
-  const mat = mesh.material as THREE.MeshStandardMaterial;
-  mat.roughness = Math.max(mat.roughness, 0.75);
-  mat.metalness = 0;
+  const mat = furLook(mesh.material as THREE.MeshStandardMaterial);
+  mesh.material = mat;
   const info = INFO[name] ?? {};
   if (info.fur) {
     if (!mesh.geometry.attributes.fur) furMask(mesh);
