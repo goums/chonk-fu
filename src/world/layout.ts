@@ -19,24 +19,96 @@ export const POND = { x: -70, z: 105, r: 18 };
 export const riverX = (z: number) => 72 + 16 * Math.sin(z * 0.022) + 6 * Math.sin(z * 0.061 + 1.3);
 export const RIVER_HALF_WIDTH = 7;
 
-/** bridges cross the river where paths do */
-export const BRIDGES = [{ z: 30 }, { z: -95 }, { z: 160 }].map((b) => ({ x: riverX(b.z), z: b.z }));
+/** slope of the river course, d riverX / dz */
+export const riverSlope = (z: number) => 16 * 0.022 * Math.cos(z * 0.022) + 6 * 0.061 * Math.cos(z * 0.061 + 1.3);
 
-/** dirt paths (polylines) */
-export const PATHS: [number, number][][] = [
-  // main street: east bridge -> village square -> peach hill
-  [[BRIDGES[0].x + 16, 30], [40, 30], [0, 30], [-50, 28], [-90, 18], [-118, 10]],
-  // village square -> foot of the stairs
-  [[0, 30], [0, 5], [STAIRS.x, STAIRS.z0]],
-  // village -> training arena
-  [[0, 30], [4, 70], [-4, 110], [ARENA.x, ARENA.z - ARENA.r]],
-  // into the bamboo forest
-  [[BRIDGES[0].x + 16, 30], [120, 20], [150, -10], [170, -50]],
-  // north bridge trail
-  [[0, -42], [40, -70], [BRIDGES[1].x, -95], [130, -110]],
-  // pond trail
-  [[-50, 28], [-60, 70], [POND.x, POND.z - POND.r]],
-];
+/**
+ * An arched footbridge laid square across the river. Local axis s runs along the deck (unit vector
+ * (ux, uz), toward the east bank), l across it; the deck spans s0..s1 with its ends (y0, y1) resting on
+ * dry ground. ry is the Batch/Object3D yaw that maps local +x onto the deck axis. The span is measured
+ * on the terrain by measureBridges() before the heightfield is baked.
+ */
+export interface Bridge { x: number; z: number; ux: number; uz: number; ry: number; s0: number; s1: number; y0: number; y1: number; arch: number; w: number }
+
+/**
+ * bridges cross the river where paths do (x, z = the middle of the stream). Each sits where both banks are
+ * firm: north of the village the east bank is a flooded flat from z = -140 to -80, so the north bridge
+ * crosses at z = -56.
+ */
+export const BRIDGES: Bridge[] = [30, -56, 160].map((z) => {
+  const k = riverSlope(z), n = Math.hypot(1, k);
+  const ux = 1 / n, uz = -k / n; // perpendicular to the river's tangent (k, 1)
+  return { x: riverX(z), z, ux, uz, ry: Math.atan2(-uz, ux), s0: -14, s1: 14, y0: GROUND, y1: GROUND, arch: 2.2, w: 3.6 };
+});
+
+/** world -> bridge-local (s along the deck, l across it) */
+export const bridgeLocal = (b: Bridge, x: number, z: number) => {
+  const dx = x - b.x, dz = z - b.z;
+  return { s: dx * b.ux + dz * b.uz, l: -dx * b.uz + dz * b.ux };
+};
+/** a point on the bridge axis, `s` meters from the middle of the stream */
+export const bridgePoint = (b: Bridge, s: number): [number, number] => [b.x + b.ux * s, b.z + b.uz * s];
+/** flat stone landing beyond each deck end, level with it (walkable, part of the bridge) */
+export const BRIDGE_LANDING = 1.8;
+/** deck walking height at local s (a gentle arch between the two bank heights; flat on the landings) */
+export const bridgeDeckY = (b: Bridge, s: number) => {
+  const t = Math.min(1, Math.max(0, (s - b.s0) / (b.s1 - b.s0)));
+  return b.y0 + (b.y1 - b.y0) * t + b.arch * 4 * t * (1 - t);
+};
+
+/** dirt paths (polylines); filled by measureBridges, since their ends meet the bridge landings */
+export const PATHS: [number, number][][] = [];
+
+/**
+ * Size every bridge on the real (pre-path) terrain: walk out from the stream along the deck axis until
+ * the ground is well above the water on each bank, then add a landing so the deck ends on dry land.
+ * Then lay out the paths so they meet the bridge ends.
+ */
+export function measureBridges(height: (x: number, z: number) => number) {
+  const LANDING = 2.5;
+  for (const b of BRIDGES) {
+    for (const side of [-1, 1]) {
+      let s = 0;
+      // the bank is where the ground clears the water by a margin across the whole deck width
+      const dry = (s: number) => {
+        for (const l of [-b.w / 2, 0, b.w / 2]) {
+          const x = b.x + b.ux * s * side - b.uz * l, z = b.z + b.uz * s * side + b.ux * l;
+          if (height(x, z) < WATER_LEVEL + 0.7) return false;
+        }
+        return true;
+      };
+      while (s < 40 && !dry(s)) s += 0.25;
+      const end = s + LANDING;
+      // the deck end rests on the bank: as high as the ground under any part of its width
+      let y = -Infinity;
+      for (const l of [-b.w / 2, 0, b.w / 2]) y = Math.max(y, height(b.x + b.ux * end * side - b.uz * l, b.z + b.uz * end * side + b.ux * l));
+      y += 0.02;
+      if (side < 0) { b.s0 = -end; b.y0 = y; } else { b.s1 = end; b.y1 = y; }
+    }
+    b.arch = Math.min(2.4, Math.max(1.2, (b.s1 - b.s0) * 0.075));
+  }
+  const [B0, B1, B2] = BRIDGES;
+  const end = (b: Bridge, side: number, out = 0) => bridgePoint(b, side < 0 ? b.s0 - out : b.s1 + out);
+  PATHS.length = 0;
+  PATHS.push(
+    // main street: east bridge -> village square -> peach hill
+    [end(B0, -1), end(B0, -1, 5), [40, 30], [0, 30], [-50, 28], [-90, 18], [-118, 10]],
+    // village square -> foot of the stairs
+    [[0, 30], [0, 5], [STAIRS.x, STAIRS.z0]],
+    // village -> training arena
+    [[0, 30], [4, 70], [-4, 110], [ARENA.x, ARENA.z - ARENA.r]],
+    // into the bamboo forest
+    [end(B0, 1), end(B0, 1, 5), [120, 20], [150, -10], [170, -50]],
+    // north bridge trail
+    [[0, -42], [24, -50], end(B1, -1, 6), end(B1, -1)],
+    [end(B1, 1), end(B1, 1, 6), [130, -110]],
+    // south bridge: from the arena gate across the river to the forest's southern edge
+    [[ARENA.x, ARENA.z - ARENA.r], [24, 120], end(B2, -1, 6), end(B2, -1)],
+    [end(B2, 1), end(B2, 1, 6), [118, 112]],
+    // pond trail
+    [[-50, 28], [-60, 70], [POND.x, POND.z - POND.r]],
+  );
+}
 
 /** karst pillars ring the valley (x, z, radius, height) */
 export const PILLARS: [number, number, number, number][] = [

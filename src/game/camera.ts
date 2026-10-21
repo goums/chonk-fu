@@ -3,7 +3,8 @@
 import * as THREE from 'three';
 import { angleDelta, clamp, damp } from '../core/math';
 import { heightAt } from '../world/terrain';
-import { pointBlocked } from './colliders';
+import { setOcclusionFocus } from '../world/kit';
+import { CAMERA_SOLID, pointBlocked } from './colliders';
 
 export class FollowCamera {
   yaw = Math.PI; // camera sits at target + (sin yaw, ., cos yaw) * dist
@@ -16,6 +17,22 @@ export class FollowCamera {
   constructor(public camera: THREE.PerspectiveCamera) {}
 
   private pull = 0;
+  /** extra pitch from rising ground behind the camera (eased) */
+  private lift = 0;
+  /** seconds to hold a collision pull-in before easing back out */
+  private hold = 0;
+  private dir = new THREE.Vector3();
+  private focusPt = new THREE.Vector3();
+
+  /** is the orbit at this pitch and distance clear of the terrain? */
+  private terrainClear(pitch: number, dist: number) {
+    const cp = Math.cos(pitch), sx = Math.sin(this.yaw) * cp, sy = Math.sin(pitch), sz = Math.cos(this.yaw) * cp;
+    for (let d = 1; ; d = Math.min(dist, d + 0.6)) {
+      const px = this.target.x + sx * d, py = this.target.y + sy * d, pz = this.target.z + sz * d;
+      if (py < heightAt(px, pz) + 0.45) return false;
+      if (d >= dist) return true;
+    }
+  }
   /** dialog shot state: which side of the conversation line the camera stays on (180° rule) */
   private shotSide = 0;
   private inShot = false;
@@ -97,6 +114,8 @@ export class FollowCamera {
     const rel = cam.clone().sub(this.target);
     this.yaw = Math.atan2(rel.x, rel.z);
     this.reach = Math.min(this.dist, rel.length());
+    // keep the see-through capsule on Le Chonk during the shot too (rendering only; framing unchanged)
+    setOcclusionFocus(cam, this.focusPt.set(a.x, a.y + 1.0, a.z));
   }
 
   update(dt: number, focus: THREE.Vector3, heading: number, moving: boolean, look: { dx: number; dy: number; wheel: number; held?: boolean }, vel?: THREE.Vector3) {
@@ -124,29 +143,37 @@ export class FollowCamera {
     this.target.z = damp(this.target.z, focus.z + az, 7, dt);
     if (this.target.distanceTo(focus) > 20) this.target.copy(focus).setY(focus.y + 1.5);
 
-    const cp = Math.cos(this.pitch);
-    const cam = this.camera.position;
-    cam.set(
-      this.target.x + Math.sin(this.yaw) * cp * this.dist * (1 + this.pull),
-      this.target.y + Math.sin(this.pitch) * this.dist * (1 + this.pull),
-      this.target.z + Math.cos(this.yaw) * cp * this.dist * (1 + this.pull),
-    );
-    // pull in front of walls between the hero and the camera
-    const dir = cam.clone().sub(this.target);
-    const full = dir.length();
-    dir.divideScalar(full);
+    const full = this.dist * (1 + this.pull);
+    // rising ground behind the camera: tilt the orbit up a little (bounded, eased) rather than diving in
+    let lift = 0;
+    while (lift < 0.45 && !this.terrainClear(this.pitch + lift, full)) lift += 0.075;
+    this.lift = damp(this.lift, lift, lift > this.lift ? 3 : 1.2, dt);
+    const pitch = Math.min(1.3, this.pitch + this.lift);
+    const cp = Math.cos(pitch);
+    const dir = this.dir.set(Math.sin(this.yaw) * cp, Math.sin(pitch), Math.cos(this.yaw) * cp);
+
+    // pull in only in front of solid architecture and rocks (and ground the lift could not clear);
+    // trees, bamboo and props in the way dissolve instead (see-through cut-out in their materials)
     let reach = full;
-    for (let d = 1; d < full; d += 0.5) {
+    for (let d = 0.8; d < full; d += 0.35) {
       const px = this.target.x + dir.x * d, py = this.target.y + dir.y * d, pz = this.target.z + dir.z * d;
-      if (pointBlocked(px, py, pz, 1.4) || py < heightAt(px, pz) + 0.3) {
-        reach = Math.max(1.2, d - 0.6);
+      if (pointBlocked(px, py, pz, 0.9, CAMERA_SOLID) || py < heightAt(px, pz) + 0.3) {
+        reach = Math.max(1.2, d - 0.5);
         break;
       }
     }
-    this.reach = reach < this.reach ? reach : damp(this.reach, reach, 3, dt);
+    // ease in quickly, hold, then ease back out slowly: no snapping, no flicker at a wall's edge
+    if (reach < this.reach - 0.02) {
+      this.reach = damp(this.reach, reach, 9, dt);
+      this.hold = 0.45;
+    } else if ((this.hold -= dt) <= 0) this.reach = damp(this.reach, reach, 1.6, dt);
+    else this.reach = Math.min(this.reach, full);
+
+    const cam = this.camera.position;
     cam.copy(this.target).addScaledVector(dir, this.reach);
     const ground = heightAt(cam.x, cam.z) + 0.6;
     if (cam.y < ground) cam.y = ground;
+    setOcclusionFocus(cam, this.focusPt.set(focus.x, focus.y + 1.0, focus.z));
     this.camera.lookAt(this.target);
   }
 }

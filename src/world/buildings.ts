@@ -4,7 +4,10 @@ import * as THREE from 'three';
 import { rng } from '../core/math';
 import { addBox, addCircle } from '../game/colliders';
 import { Batch, addRidge, box, cyl, kitMaterial, roofGeometry } from './kit';
-import { ARENA, BRIDGES, FRUIT_TREES, GROUND, MUSHROOM_ROCKS, PALACE_MOUNT, PEACH_HILL, POND, RIVER_HALF_WIDTH, SHOOTS, SPOTS, STAIRS, VILLAGE, riverX } from './layout';
+import {
+  ARENA, BRIDGES, BRIDGE_LANDING, FRUIT_TREES, GROUND, MUSHROOM_ROCKS, PALACE_MOUNT, PEACH_HILL, POND, SHOOTS, SPOTS, STAIRS, VILLAGE, WATER_LEVEL,
+  bridgeDeckY, bridgeLocal, riverX, type Bridge,
+} from './layout';
 import { heightAt, stairHeight } from './terrain';
 
 const C = {
@@ -159,33 +162,50 @@ function gate(w: number, h: number) {
   return b.geometry();
 }
 
-/** arched wooden bridge spanning `len` along x, deck `w` wide */
-export const BRIDGE = { len: 2 * RIVER_HALF_WIDTH + 14, w: 3.6, arch: 2.2 };
-function bridge() {
+/**
+ * Arched wooden bridge for one crossing, in bridge-local space (x = along the deck, z = across it,
+ * y = world height): deck planks on the measured span, rails and posts, piers down to the river bed,
+ * and stone abutments + landings so both ends sit on the banks.
+ */
+function bridge(br: Bridge) {
   const b = new Batch();
-  const { len, w } = BRIDGE;
-  const n = 24;
+  const { s0, s1, w } = br;
+  const at = (s: number, l = 0) => [br.x + br.ux * s - br.uz * l, br.z + br.uz * s + br.ux * l] as const;
+  const ground = (s: number, l = 0) => heightAt(...at(s, l));
+  const n = Math.max(16, Math.round((s1 - s0) / 1.2));
   for (let i = 0; i < n; i++) {
-    const x0 = -len / 2 + (len * i) / n, x1 = -len / 2 + (len * (i + 1)) / n;
-    const y0 = bridgeArch(x0), y1 = bridgeArch(x1);
+    const x0 = s0 + ((s1 - s0) * i) / n, x1 = s0 + ((s1 - s0) * (i + 1)) / n;
+    const y0 = bridgeDeckY(br, x0), y1 = bridgeDeckY(br, x1);
     const xm = (x0 + x1) / 2, ym = (y0 + y1) / 2;
-    const ang = Math.atan2(y1 - y0, x1 - x0);
-    b.add(box(Math.hypot(x1 - x0, y1 - y0) + 0.02, 0.25, w), i % 2 ? C.wood : C.woodLight, xm, ym - 0.12, 0, 0, 1, 1, 1, 0, ang);
-    if (i % 3 === 0)
-      for (const s of [-1, 1]) {
-        b.add(cyl(0.09, 0.09, 1.2, 6), C.pillar, x0, y0 + 0.5, (s * w) / 2);
-      }
-    for (const s of [-1, 1]) b.add(box(Math.hypot(x1 - x0, y1 - y0) + 0.05, 0.12, 0.14), C.pillar, xm, ym + 1.0, (s * w) / 2, 0, 1, 1, 1, 0, ang);
+    const ang = Math.atan2(y1 - y0, x1 - x0), len = Math.hypot(x1 - x0, y1 - y0);
+    b.add(box(len + 0.02, 0.25, w), i % 2 ? C.wood : C.woodLight, xm, ym - 0.12, 0, 0, 1, 1, 1, 0, ang);
+    if (i % 3 === 0) for (const s of [-1, 1]) b.add(cyl(0.09, 0.09, 1.2, 6), C.pillar, x0, y0 + 0.5, (s * w) / 2);
+    for (const s of [-1, 1]) b.add(box(len + 0.05, 0.12, 0.14), C.pillar, xm, ym + 1.0, (s * w) / 2, 0, 1, 1, 1, 0, ang);
   }
-  for (const s of [-1, 1]) b.add(cyl(0.18, 0.18, 1.6, 8), C.pillar, (s * len) / 2, 0.8, w / 2), b.add(cyl(0.18, 0.18, 1.6, 8), C.pillar, (s * len) / 2, 0.8, -w / 2);
-  // supports in the water
-  for (const x of [-len / 4, 0, len / 4]) for (const s of [-1, 1]) b.add(cyl(0.2, 0.2, 5, 8), C.beam, x, bridgeArch(x) - 2.6, (s * w) / 2 - s * 0.3);
+  for (const [s, y] of [[s0, br.y0], [s1, br.y1]] as const) {
+    const out = Math.sign(s);
+    // big end posts on dry ground
+    for (const l of [-w / 2, w / 2]) b.add(cyl(0.18, 0.18, 1.7, 8), C.pillar, s, y + 0.75, l);
+    // stone abutment under the deck end (from the landing back toward the water), down into the bank
+    const a0 = s - out * 4.5, a1 = s + out * 0.4;
+    const top = Math.min(bridgeDeckY(br, a0), bridgeDeckY(br, a1)) - 0.2;
+    const bottom = Math.min(ground(a0), ground(s)) - 1.2;
+    b.add(box(Math.abs(a1 - a0), top - bottom, w + 0.5), C.stoneDark, (a0 + a1) / 2, (top + bottom) / 2, 0);
+    // flat stone landing where the path arrives
+    const l0 = s, l1 = s + out * BRIDGE_LANDING;
+    const lb = Math.min(ground(l0), ground(l1)) - 0.3;
+    b.add(box(Math.abs(l1 - l0), y - lb, w + 0.4), C.stone, (l0 + l1) / 2, (y + lb) / 2, 0);
+  }
+  // piers down to the river bed, only where they stand in the water
+  for (const t of [0.3, 0.5, 0.7]) {
+    const x = s0 + (s1 - s0) * t;
+    for (const s of [-1, 1]) {
+      const l = (s * w) / 2 - s * 0.3, y = bridgeDeckY(br, x) - 0.2, g = ground(x, l) - 0.6;
+      if (g < WATER_LEVEL && y > g) b.add(cyl(0.2, 0.2, y - g, 8), C.beam, x, (y + g) / 2, l);
+    }
+  }
   return b.geometry();
 }
-export const bridgeArch = (x: number) => {
-  const u = (2 * x) / BRIDGE.len;
-  return BRIDGE.arch * (1 - u * u) + 0.0;
-};
 
 /** the Thousand Steps: one box per step, plus stone balustrades and lantern posts */
 function stairs() {
@@ -358,9 +378,8 @@ export function buildArchitecture() {
     } else if (p.name) FOOTPRINTS.push({ x: p.x, z: p.z, hx: 5, hz: 1, ry: p.ry, name: p.name });
   }
 
-  // bridges (oriented along x, across the river)
-  const bg = bridge();
-  for (const br of BRIDGES) world.addGeometry(bg, br.x, GROUND - 0.1, br.z, 0);
+  // bridges, each square to the river and as long as its crossing
+  for (const br of BRIDGES) world.addGeometry(bridge(br), br.x, 0, br.z, br.ry);
 
   // lantern strings across the main street and the north lane
   const ls = lanternString(18, 6), pg = pole(5.2);
@@ -409,8 +428,8 @@ export function stepTreadAt(x: number, z: number): number {
 /** walkable height including bridge decks */
 export function bridgeDeckAt(x: number, z: number): number {
   for (const br of BRIDGES) {
-    const lx = x - br.x, lz = z - br.z;
-    if (Math.abs(lx) < BRIDGE.len / 2 && Math.abs(lz) < BRIDGE.w / 2) return GROUND - 0.1 + bridgeArch(lx);
+    const { s, l } = bridgeLocal(br, x, z);
+    if (s > br.s0 - BRIDGE_LANDING && s < br.s1 + BRIDGE_LANDING && Math.abs(l) < br.w / 2) return bridgeDeckY(br, s);
   }
   return -Infinity;
 }
@@ -418,7 +437,10 @@ export function bridgeDeckAt(x: number, z: number): number {
 /** true if (x, z) is on or right next to a building, a bridge, the stairs or a street: no trees there */
 export function reserved(x: number, z: number) {
   for (const f of FOOTPRINTS) if (Math.abs(x - f.x) < Math.max(f.hx, f.hz) + 2.5 && Math.abs(z - f.z) < Math.max(f.hx, f.hz) + 2.5) return true;
-  for (const br of BRIDGES) if (Math.abs(x - br.x) < BRIDGE.len / 2 + 3 && Math.abs(z - br.z) < 5) return true;
+  for (const br of BRIDGES) {
+    const { s, l } = bridgeLocal(br, x, z);
+    if (s > br.s0 - 4 && s < br.s1 + 4 && Math.abs(l) < br.w / 2 + 3) return true;
+  }
   if (Math.abs(x - VILLAGE.x) < 60 && Math.abs(z - VILLAGE.z) < 6) return true;
   if (Math.abs(x - riverX(z)) < 2) return true;
   for (const p of Object.values(SPOTS)) if (Math.hypot(x - p.x, z - p.z) < 6) return true;

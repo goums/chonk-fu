@@ -181,12 +181,12 @@ export function buildVegetation(reserved: (x: number, z: number) => boolean) {
   const P = { peach: [[], [], []], round: [[], [], []], pine: [[], [], []], bamboo: [[], [], []], rock: [[], [], []] } as Record<string, Placement[][]>;
   const put = (kind: string, x: number, z: number, s: number, collide: number) => {
     P[kind][Math.floor(R() * VAR)].push({ x, z, ry: R() * Math.PI * 2, s });
-    if (collide > 0) addCircle(x, z, collide * s, -100, heightAt(x, z) + (kind === 'rock' ? 1.2 * s : 2.5));
+    if (collide > 0) addCircle(x, z, collide * s, -100, heightAt(x, z) + (kind === 'rock' ? 1.2 * s : 2.5), kind === 'rock' ? 'rock' : 'veg');
   };
 
   // the sacred peach tree on its hill: a giant
   P.peach[0].push({ x: PEACH_HILL.x, z: PEACH_HILL.z, ry: 0.4, s: 2.6 });
-  addCircle(PEACH_HILL.x, PEACH_HILL.z, 0.9);
+  addCircle(PEACH_HILL.x, PEACH_HILL.z, 0.9, -100, 1000, 'veg');
 
   for (let k = 0; k < 9000; k++) {
     const x = (R() - 0.5) * 520, z = (R() - 0.5) * 520;

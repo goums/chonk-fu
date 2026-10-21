@@ -7,6 +7,31 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { addOcclusionCutout } from '../world/kit';
+
+/**
+ * GTAO builds its depth/normal buffer by drawing the whole scene with one MeshNormalMaterial override.
+ * Only points and lines are skipped there, so a Sprite (a cloud) is drawn as its raw, un-billboarded
+ * quad and the sky dome / far mountain ridges as solid surfaces; GTAO then shades those far quads as
+ * occluded and they show up as big black panels across the sky. Here every sprite, every material that
+ * does not write depth (sky, ridges, overlays, fx) and anything tagged userData.noAO stays out of it.
+ */
+class SceneGTAOPass extends GTAOPass {
+  _overrideVisibility() {
+    const cache = (this as unknown as { _visibilityCache: THREE.Object3D[] })._visibilityCache;
+    this.scene.traverse((o) => {
+      if (!o.visible) return;
+      const mat = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+      const noDepth = mat !== undefined && (Array.isArray(mat) ? mat.every((m) => !m.depthWrite) : !mat.depthWrite);
+      const flags = o as { isPoints?: boolean; isLine?: boolean; isLine2?: boolean; isSprite?: boolean };
+      const skip = flags.isPoints || flags.isLine || flags.isLine2 || flags.isSprite || noDepth || o.userData.noAO;
+      if (skip) {
+        o.visible = false;
+        cache.push(o);
+      }
+    });
+  }
+}
 
 const GradeShader = {
   uniforms: { tDiffuse: { value: null }, uWarm: { value: 0.06 }, uSat: { value: 1.12 }, uVignette: { value: 0.32 } },
@@ -35,7 +60,9 @@ export function createPost(renderer: THREE.WebGLRenderer, scene: THREE.Scene, ca
   const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
   const composer = new EffectComposer(renderer, target);
   composer.addPass(new RenderPass(scene, camera));
-  const ao = new GTAOPass(scene, camera, size.x, size.y);
+  const ao = new SceneGTAOPass(scene, camera, size.x, size.y);
+  // what the see-through cut-out removes must not leave its ambient-occlusion ghost behind
+  ao.normalMaterial.onBeforeCompile = addOcclusionCutout;
   ao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.5, thickness: 1.5, scale: 1.2, samples: 12 });
   ao.blendIntensity = 0.85;
   composer.addPass(ao);

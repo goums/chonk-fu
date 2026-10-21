@@ -1,7 +1,10 @@
 // Static obstacles as 2D shapes (circles and oriented boxes) with a height range, in a coarse grid.
 // Characters are vertical cylinders pushed out of these. Simple, fast and deterministic.
-export interface Circle { kind: 'circle'; x: number; z: number; r: number; y0: number; y1: number }
-export interface Box { kind: 'box'; x: number; z: number; hx: number; hz: number; rot: number; y0: number; y1: number }
+// Each obstacle is tagged by what it is, so queries can pick: the follow camera only steers around solid
+// architecture and rocks, and lets foliage and small props be (they turn see-through instead).
+export type ColliderTag = 'building' | 'rock' | 'veg' | 'prop';
+export interface Circle { kind: 'circle'; tag: ColliderTag; x: number; z: number; r: number; y0: number; y1: number }
+export interface Box { kind: 'box'; tag: ColliderTag; x: number; z: number; hx: number; hz: number; rot: number; y0: number; y1: number }
 export type Collider = Circle | Box;
 
 const CELL = 16;
@@ -31,11 +34,11 @@ export function removeCollider(c: Collider) {
   cellsOf.delete(c);
   allColliders.splice(allColliders.indexOf(c), 1);
 }
-export function addCircle(x: number, z: number, r: number, y0 = -100, y1 = 1000) {
-  return insert({ kind: 'circle', x, z, r, y0, y1 }, r);
+export function addCircle(x: number, z: number, r: number, y0 = -100, y1 = 1000, tag: ColliderTag = 'prop') {
+  return insert({ kind: 'circle', tag, x, z, r, y0, y1 }, r);
 }
-export function addBox(x: number, z: number, hx: number, hz: number, rot = 0, y0 = -100, y1 = 1000) {
-  return insert({ kind: 'box', x, z, hx, hz, rot, y0, y1 }, Math.hypot(hx, hz));
+export function addBox(x: number, z: number, hx: number, hz: number, rot = 0, y0 = -100, y1 = 1000, tag: ColliderTag = 'building') {
+  return insert({ kind: 'box', tag, x, z, hx, hz, rot, y0, y1 }, Math.hypot(hx, hz));
 }
 
 /** push a cylinder (x, z, radius r, feet at y, height h) out of the obstacles; returns the corrected position */
@@ -82,12 +85,16 @@ export function resolve(x: number, z: number, r: number, y: number, h: number): 
   return { x, z, hit };
 }
 
-/** true if the point is inside an obstacle (used to keep the camera out of buildings) */
-export function pointBlocked(x: number, y: number, z: number, pad = 0.3) {
+/** obstacles the follow camera treats as solid */
+export const CAMERA_SOLID: ReadonlySet<ColliderTag> = new Set<ColliderTag>(['building', 'rock']);
+
+/** true if the point is inside an obstacle (optionally only obstacles with one of `tags`) */
+export function pointBlocked(x: number, y: number, z: number, pad = 0.3, tags?: ReadonlySet<ColliderTag>) {
   const near = grid.get(key(Math.floor(x / CELL), Math.floor(z / CELL)));
   if (!near) return false;
   for (const c of near) {
     if (y < c.y0 || y > c.y1) continue;
+    if (tags && !tags.has(c.tag)) continue;
     if (c.kind === 'circle') {
       if (Math.hypot(x - c.x, z - c.z) < c.r + pad) return true;
     } else {

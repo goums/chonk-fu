@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { clamp, fbm, lerp, polyDist, smoothstep } from '../core/math';
 import {
   ARENA, BAMBOO_FOREST, GROUND, PALACE_MOUNT, PATHS, PEACH_HILL, PILLARS, POND, RIVER_HALF_WIDTH, STAIRS, VILLAGE,
-  WATER_LEVEL, WORLD_SIZE, riverX,
+  WATER_LEVEL, WORLD_SIZE, measureBridges, riverX,
 } from './layout';
 
 export const CELL = 2;
@@ -98,6 +98,10 @@ function rawHeight(x: number, z: number): number {
   if (pf > 0 && h > WATER_LEVEL + 0.5) h -= pf * 0.12;
   return h;
 }
+
+// size the bridges on the bare terrain (PATHS is still empty, so no path sinking yet) and lay out the
+// paths that meet their landings; the heightfield below is then baked with those paths
+measureBridges(rawHeight);
 
 /** (N+1)^2 heights */
 export const heights = new Float32Array((N + 1) * (N + 1));

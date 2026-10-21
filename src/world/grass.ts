@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { fbm, rng } from '../core/math';
 import { BAMBOO_FOREST, WATER_LEVEL } from './layout';
 import { heightAt, normalAt, pathFactor } from './terrain';
+import { addOcclusionCutout } from './kit';
 import { chunkedInstances } from './vegetation';
 
 function tuftGeometry(blades: number, h: number, seed: number, base: THREE.Color, tip: THREE.Color) {
@@ -62,6 +63,7 @@ export function buildGrass(reserved: (x: number, z: number) => boolean) {
   const uniforms = { uTime: { value: 0 } };
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
   mat.onBeforeCompile = (sh) => {
+    addOcclusionCutout(sh);
     sh.uniforms.uTime = uniforms.uTime;
     // both faces of a blade are lit like its front
     sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize(vNormal);');

@@ -4,7 +4,8 @@
 // M toggles mute (remembered in localStorage).
 import { clamp } from '../core/math';
 import type { Game } from '../game/game';
-import { BRIDGES, GROUND, PALACE_MOUNT, RIVER_HALF_WIDTH, STAIRS, WATER_LEVEL } from '../world/layout';
+import { GROUND, PALACE_MOUNT, STAIRS, WATER_LEVEL } from '../world/layout';
+import { bridgeDeckAt } from '../world/buildings';
 import { Ambience } from './ambience';
 import { Music, type Mood } from './music';
 import { Sfx, type Surface } from './sfx';
@@ -199,7 +200,7 @@ export class GameAudio {
 
   private surface(x: number, y: number, z: number): Surface {
     if (y < WATER_LEVEL - 0.05) return 'water';
-    if (BRIDGES.some((b) => Math.abs(z - b.z) < 3.5 && Math.abs(x - b.x) < RIVER_HALF_WIDTH + 3)) return 'wood';
+    if (bridgeDeckAt(x, z) > -Infinity) return 'wood';
     if (Math.abs(x - STAIRS.x) < STAIRS.halfWidth + 0.5 && z < STAIRS.z0 + 2 && z > STAIRS.z1 - 2) return 'stone';
     if (Math.hypot(x - PALACE_MOUNT.x, z - PALACE_MOUNT.z) < PALACE_MOUNT.plateau && y > GROUND + 30) return 'stone';
     return 'grass';

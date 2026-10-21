@@ -53,15 +53,70 @@ export class Batch {
   }
 }
 
+// ------------------------------------------------------------------ see-through occlusion cut-out
+// Foliage, props and architecture between the camera and Le Chonk dissolve: fragments inside a capsule
+// around the camera -> Le Chonk segment are discarded with a screen-space dither (soft edge, no sorting
+// needed, shadows unchanged). It never reaches the last ~1.5 m before him, so his feet and the ground
+// around him stay solid; a small sphere around the lens also clears anything brushing the camera.
+const OCC = {
+  uOccCam: { value: new THREE.Vector3(0, -1e5, 0) },
+  uOccFocus: { value: new THREE.Vector3(0, -1e5, 0) },
+  uOccRadius: { value: 1.2 },
+};
+/** move the see-through capsule: from the camera to the point to keep visible (Le Chonk's chest) */
+export function setOcclusionFocus(cam: THREE.Vector3, focus: THREE.Vector3) {
+  OCC.uOccCam.value.copy(cam);
+  OCC.uOccFocus.value.copy(focus);
+}
+/** inject the cut-out into a built-in material's shaders (call from onBeforeCompile; any material with
+ *  a project_vertex chunk, including the AO pass's MeshNormalMaterial, which has no <common> chunk) */
+export function addOcclusionCutout(sh: THREE.WebGLProgramParametersWithUniforms) {
+  Object.assign(sh.uniforms, OCC);
+  sh.vertexShader = sh.vertexShader
+    .replace('void main() {', 'varying vec3 vOccPos;\nvoid main() {')
+    .replace('#include <project_vertex>', `#include <project_vertex>
+      {
+        vec4 op = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+        op = instanceMatrix * op;
+        #endif
+        vOccPos = (modelMatrix * op).xyz;
+      }`);
+  sh.fragmentShader = sh.fragmentShader
+    .replace('void main() {', `varying vec3 vOccPos;
+    uniform vec3 uOccCam, uOccFocus;
+    uniform float uOccRadius;
+    void main() {
+      {
+        vec3 seg = uOccFocus - uOccCam;
+        float L = length(seg);
+        vec3 rel = vOccPos - uOccCam;
+        float cut = 1.0 - smoothstep(0.7, 1.3, length(rel)); // right at the lens
+        if (L > 0.5) {
+          vec3 dir = seg / L;
+          float t = dot(rel, dir);
+          if (t > 0.0 && t < L) {
+            float d = length(rel - dir * t);
+            float r = uOccRadius * mix(1.35, 1.0, smoothstep(0.0, 3.0, t)); // a little wider near the lens
+            cut = max(cut, (1.0 - smoothstep(r * 0.55, r, d)) * smoothstep(1.0, 2.2, L - t));
+          }
+        }
+        // interleaved-gradient-noise dither: partial cut = scattered pixels, full cut = gone
+        float dn = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+        if (cut > dn + 0.001) discard;
+      }`);
+}
+
 let shared: THREE.MeshStandardMaterial | null = null;
 /**
  * Architecture and foliage material: soft PBR with a little painted grain (world-space noise) so flat
- * colors read as plaster, wood and leaves rather than plastic.
+ * colors read as plaster, wood and leaves rather than plastic, and the see-through occlusion cut-out.
  */
 export const kitMaterial = () => {
   if (shared) return shared;
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82, metalness: 0 });
   m.onBeforeCompile = (sh) => {
+    addOcclusionCutout(sh);
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vGrainPos;')
       .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
