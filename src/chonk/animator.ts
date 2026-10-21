@@ -64,7 +64,10 @@ export class Animator {
   private cur = zero();
   private phase = 0;
 
-  constructor(private rig: ChonkRig) {}
+  private browY: number;
+  constructor(private rig: ChonkRig) {
+    this.browY = rig.browL.position.y;
+  }
 
   update(inp: AnimInput, dt: number) {
     const P = zero();
@@ -203,7 +206,7 @@ export class Animator {
     const p = P as unknown as Record<string, number>;
     for (const k in p) c[k] = damp(c[k], p[k], lambda, dt);
     const r = this.rig, C = this.cur;
-    r.hips.position.y = 0.5 + C.hipsY;
+    r.hips.position.y = r.hipBase + C.hipsY;
     r.hips.rotation.set(C.hipsX, C.hipsYaw, C.hipsRoll, 'YXZ');
     r.body.rotation.set(C.bodyX, C.bodyYaw, C.bodyRoll, 'YXZ');
     r.body.scale.set(1 + (1 - C.squash) * 0.6, C.squash, 1 + (1 - C.squash) * 0.6);
@@ -225,7 +228,7 @@ export class Animator {
     const b = C.brow;
     r.browL.rotation.z = -0.35 * Math.min(b, 1) + (b > 1 ? 0.6 * (b - 1) : 0);
     r.browR.rotation.z = 0.35 * Math.min(b, 1) - (b > 1 ? 0.6 * (b - 1) : 0);
-    r.browL.position.y = r.browR.position.y = 0.48 - 0.02 * Math.min(b, 1);
+    r.browL.position.y = r.browR.position.y = this.browY - 0.02 * Math.min(b, 1);
     r.mouth.scale.set(1, b > 1.5 ? -1.5 : 1, 1);
   }
 }

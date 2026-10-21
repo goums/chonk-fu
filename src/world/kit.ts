@@ -2,7 +2,6 @@
 // geometry (one draw call per batch), and the signature curved Chinese roof.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { toonGradient } from '../chonk/toon';
 
 export class Batch {
   private parts: THREE.BufferGeometry[] = [];
@@ -54,8 +53,38 @@ export class Batch {
   }
 }
 
-let shared: THREE.MeshToonMaterial | null = null;
-export const kitMaterial = () => (shared ??= new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonGradient() }));
+let shared: THREE.MeshStandardMaterial | null = null;
+/**
+ * Architecture and foliage material: soft PBR with a little painted grain (world-space noise) so flat
+ * colors read as plaster, wood and leaves rather than plastic.
+ */
+export const kitMaterial = () => {
+  if (shared) return shared;
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82, metalness: 0 });
+  m.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vGrainPos;')
+      .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>
+        vec4 gp = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+        gp = instanceMatrix * gp;
+        #endif
+        vGrainPos = (modelMatrix * gp).xyz;`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+        varying vec3 vGrainPos;
+        float gh(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+        float gn(vec3 x) {
+          vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(mix(gh(i), gh(i + vec3(1,0,0)), f.x), mix(gh(i + vec3(0,1,0)), gh(i + vec3(1,1,0)), f.x), f.y),
+                     mix(mix(gh(i + vec3(0,0,1)), gh(i + vec3(1,0,1)), f.x), mix(gh(i + vec3(0,1,1)), gh(i + vec3(1,1,1)), f.x), f.y), f.z);
+        }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        float grain = gn(vGrainPos * 3.0) * 0.6 + gn(vGrainPos * 11.0) * 0.4;
+        diffuseColor.rgb *= 0.88 + 0.22 * grain;`);
+  };
+  return (shared = m);
+};
 
 /**
  * Curved hip roof with upturned corners. Footprint w x d (ridge along x), rise h, eaves curl `curl`.

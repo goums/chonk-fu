@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { WATER_LEVEL, WORLD_SIZE } from './layout';
 
 export function buildWater() {
-  const mat = new THREE.MeshLambertMaterial({ color: 0x4fb3c4, transparent: true, opacity: 0.82 });
+  const mat = new THREE.MeshStandardMaterial({ color: 0x3f9fb4, transparent: true, opacity: 0.85, roughness: 0.12, metalness: 0.1 });
   const uniforms = { uTime: { value: 0 } };
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = uniforms.uTime;

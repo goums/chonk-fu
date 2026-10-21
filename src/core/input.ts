@@ -8,6 +8,8 @@ export interface Intent {
   kick: boolean;
   belly: boolean;
   interact: boolean;
+  /** optional heading to face (agent harness: face a target while moving) */
+  face?: number | null;
 }
 export const emptyIntent = (): Intent => ({ moveX: 0, moveZ: 0, run: false, jump: false, punch: false, kick: false, belly: false, interact: false });
 
