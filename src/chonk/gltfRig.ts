@@ -28,10 +28,7 @@ const INFO: Record<string, ModelInfo> = {
   'chonk-meshy': {},
   'chonk-open': { tail: { colors: [0xe8893a, 0xb85a1c], r: 0.085, segments: 7 } },
   'chonk-hunyuan': {},
-  tiger: { fur: { shells: 8, len: 0.022 } },
-  wolf: { fur: { shells: 8, len: 0.03 } },
-  bunny: { fur: { shells: 8, len: 0.025 } },
-  duck: { fur: { shells: 5, len: 0.012 } },
+  // shell fur is available (`fur: { shells, len }`) but read as grainy noise on generated textures: off
 };
 
 /**

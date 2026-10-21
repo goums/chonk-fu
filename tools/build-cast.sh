@@ -6,17 +6,17 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 # name  height  faces  proportions (fractions of the height, see tools/rig.py)  [source mesh]
 CAST=(
-  "chonk    1.8  30000 hip=0.36,head=0.68,leg=0.27,knee=0.13"
+  "chonk    1.8  30000 hip=0.36,head=0.68,leg=0.27,knee=0.13 art/models/chonk-hy.glb"
   "chonk-tripo 1.8 30000 hip=0.36,head=0.68,leg=0.27,knee=0.13 art/models/tripo-2-5-chonk.glb"
   "chonk-meshy 1.8 30000 hip=0.36,head=0.68,leg=0.27,knee=0.13 art/models/meshy-6-1-chonk.glb"
   "chonk-open  1.8 30000 hip=0.36,head=0.68,leg=0.27,knee=0.13 art/models/chonk-a.glb"
   "chonk-hunyuan 1.8 30000 hip=0.36,head=0.68,leg=0.27,knee=0.13 art/models/chonk-hy.glb"
-  "tiger    2.3  30000 hip=0.46,head=0.79,leg=0.43,knee=0.22,sh=0.71"
-  "wolf     1.95 26000 hip=0.46,head=0.74,leg=0.43,knee=0.22,sh=0.66"
-  "tortoise 1.75 26000 hip=0.24,head=0.55,leg=0.2,knee=0.1,sh=0.45"
-  "duck     1.6  22000 hip=0.24,head=0.55,leg=0.2,knee=0.1,sh=0.45"
-  "pig      1.45 22000 hip=0.3,head=0.62,leg=0.25,knee=0.12,sh=0.5"
-  "bunny    1.5  22000 hip=0.25,head=0.55,leg=0.21,knee=0.1,sh=0.44"
+  "tiger    2.3  30000 hip=0.46,head=0.79,leg=0.43,knee=0.22,sh=0.71 art/models/tiger-hy.glb"
+  "wolf     1.95 26000 hip=0.46,head=0.74,leg=0.43,knee=0.22,sh=0.66 art/models/wolf-hy.glb"
+  "tortoise 1.75 26000 hip=0.24,head=0.55,leg=0.2,knee=0.1,sh=0.45 art/models/tortoise-hy.glb"
+  "duck     1.6  22000 hip=0.24,head=0.55,leg=0.2,knee=0.1,sh=0.45 art/models/duck-hy.glb"
+  "pig      1.45 22000 hip=0.3,head=0.62,leg=0.25,knee=0.12,sh=0.5 art/models/pig-hy.glb"
+  "bunny    1.5  22000 hip=0.25,head=0.55,leg=0.21,knee=0.1,sh=0.44 art/models/bunny-hy.glb"
 )
 mkdir -p public/models
 for row in "${CAST[@]}"; do
