@@ -71,7 +71,7 @@ export class Animator {
 
   update(inp: AnimInput, dt: number) {
     const P = zero();
-    const run = clamp(inp.speed / 7.5, 0, 1.2);
+    const run = clamp(inp.speed / 5, 0, 1.2);
     // gait phase advances with distance travelled
     this.phase += dt * (inp.speed > 0.2 ? 2.2 + inp.speed * 1.05 : 0) * Math.PI;
     const ph = this.phase;

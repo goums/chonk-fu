@@ -116,7 +116,7 @@ function frame(now: number) {
   }
   const P = game.player;
   const moving = Math.hypot(P.vel.x, P.vel.z) > 1 && !game.dialog;
-  follow.update(real, P.pos, P.heading, moving, input.look);
+  follow.update(real, P.pos, P.heading, moving, input.look, P.vel);
   if (game.shake > 0) {
     const s = game.shake * 0.25;
     camera.position.x += (Math.random() - 0.5) * s;

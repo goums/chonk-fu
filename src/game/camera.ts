@@ -15,7 +15,8 @@ export class FollowCamera {
 
   constructor(public camera: THREE.PerspectiveCamera) {}
 
-  update(dt: number, focus: THREE.Vector3, heading: number, moving: boolean, look: { dx: number; dy: number; wheel: number }) {
+  private pull = 0;
+  update(dt: number, focus: THREE.Vector3, heading: number, moving: boolean, look: { dx: number; dy: number; wheel: number }, vel?: THREE.Vector3) {
     if (look.dx || look.dy) this.idle = 0;
     else this.idle += dt;
     this.yaw -= look.dx * 0.004;
@@ -29,17 +30,21 @@ export class FollowCamera {
       this.yaw += angleDelta(this.yaw, behind) * (1 - Math.exp(-1.2 * dt));
     }
 
-    this.target.x = damp(this.target.x, focus.x, 12, dt);
-    this.target.y = damp(this.target.y, focus.y + 1.5, 8, dt);
-    this.target.z = damp(this.target.z, focus.z, 12, dt);
+    // look a little ahead of where the hero runs, follow softly, pull back a bit at speed
+    const ax = vel ? vel.x * 0.3 : 0, az = vel ? vel.z * 0.3 : 0;
+    const speed = vel ? Math.hypot(vel.x, vel.z) : 0;
+    this.pull = damp(this.pull, Math.min(1, speed / 5) * 0.12, 3, dt);
+    this.target.x = damp(this.target.x, focus.x + ax, 7, dt);
+    this.target.y = damp(this.target.y, focus.y + 1.5, 4, dt);
+    this.target.z = damp(this.target.z, focus.z + az, 7, dt);
     if (this.target.distanceTo(focus) > 20) this.target.copy(focus).setY(focus.y + 1.5);
 
     const cp = Math.cos(this.pitch);
     const cam = this.camera.position;
     cam.set(
-      this.target.x + Math.sin(this.yaw) * cp * this.dist,
-      this.target.y + Math.sin(this.pitch) * this.dist,
-      this.target.z + Math.cos(this.yaw) * cp * this.dist,
+      this.target.x + Math.sin(this.yaw) * cp * this.dist * (1 + this.pull),
+      this.target.y + Math.sin(this.pitch) * this.dist * (1 + this.pull),
+      this.target.z + Math.cos(this.yaw) * cp * this.dist * (1 + this.pull),
     );
     // pull in front of walls between the hero and the camera
     const dir = cam.clone().sub(this.target);

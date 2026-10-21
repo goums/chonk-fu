@@ -5,6 +5,10 @@ import { buildCharacter } from '../chonk/characters';
 import type { Intent } from '../core/input';
 import { Fighter } from './fighter';
 
+/** ground speeds (m/s): a chubby cat jogs, he doesn't sprint like a car */
+export const RUN_SPEED = 5;
+export const WALK_SPEED = 1.8;
+
 export class Player extends Fighter {
   /** queued follow-up in the jab -> cross -> kick combo */
   private comboNext: MoveName | null = null;
@@ -54,7 +58,7 @@ export class Player extends Fighter {
     if (len > 1) { ix /= len; iz /= len; }
     const sn = Math.sin(camYaw), cs = Math.cos(camYaw);
     const wx = -sn * iz + cs * ix, wz = -cs * iz - sn * ix;
-    this.physics(dt, wx, wz, intent.run ? 7.5 : 3.2, intent.face ?? null, intent.jump);
+    this.physics(dt, wx, wz, intent.run ? RUN_SPEED : WALK_SPEED, intent.face ?? null, intent.jump);
 
     // slow regeneration out of combat
     this.regenDelay = this.hurtT < 6 ? 1 : 0;

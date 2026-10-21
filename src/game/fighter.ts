@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { Animator, MOVES, type MoveName } from '../chonk/animator';
 import type { ChonkRig } from '../chonk/model';
-import { clamp, dampAngle } from '../core/math';
+import { angleDelta, clamp, damp } from '../core/math';
 import { WATER_LEVEL } from '../world/layout';
 import { groundAt } from '../world/world';
 import { resolve } from './colliders';
@@ -17,6 +17,9 @@ export class Fighter {
   pos = new THREE.Vector3();
   vel = new THREE.Vector3();
   heading = 0; // radians, 0 = facing +z
+  /** current turning speed (rad/s), drives the lean into turns */
+  turnRate = 0;
+  private lean = 0;
   grounded = true;
   move: MoveName | null = null;
   moveTime = 0;
@@ -131,15 +134,21 @@ export class Fighter {
     const inWater = this.pos.y < WATER_LEVEL - 0.3;
     if (inWater) speed *= 0.5;
     if (this.move) speed *= this.move === 'belly' ? 0.25 : 0.35;
-    const accel = this.grounded ? (this.stunT > 0 ? 6 : 40) : 12;
-    const dvx = wx * speed - this.vel.x, dvz = wz * speed - this.vel.z;
-    const dl = Math.hypot(dvx, dvz), maxDv = accel * dt;
-    const k = dl > maxDv ? maxDv / dl : 1;
-    this.vel.x += dvx * k;
-    this.vel.z += dvz * k;
+    // velocity eases toward the target (time constant ~0.15 s on the ground, sluggish in the air / stunned)
+    const tau = !this.grounded ? 0.6 : this.stunT > 0 ? 0.45 : Math.hypot(wx, wz) > 0.05 ? 0.15 : 0.1;
+    const k = 1 - Math.exp(-dt / tau);
+    this.vel.x += (wx * speed - this.vel.x) * k;
+    this.vel.z += (wz * speed - this.vel.z) * k;
     if (!this.ko) {
-      if (face !== null) this.heading = dampAngle(this.heading, face, 12, dt);
-      else if (Math.hypot(wx, wz) > 0.1) this.heading = dampAngle(this.heading, Math.atan2(wx, wz), this.move ? 4 : 14, dt);
+      // turn toward the movement direction with a capped turn rate, like a real body
+      const want = face ?? (Math.hypot(wx, wz) > 0.1 ? Math.atan2(wx, wz) : null);
+      if (want !== null) {
+        const maxTurn = (this.move ? 5 : 11) * dt;
+        const d = angleDelta(this.heading, want);
+        const step = Math.max(-maxTurn, Math.min(maxTurn, d));
+        this.turnRate = step / dt;
+        this.heading += step;
+      } else this.turnRate = 0;
     }
     // lunge on the strike frames
     if (this.move && this.strikeActive && this.move !== 'slam') {
@@ -198,5 +207,9 @@ export class Fighter {
     );
     this.object.position.copy(this.pos);
     this.object.rotation.y = this.heading;
+    // lean into turns, proportional to speed (Sketchbook-style)
+    const sp = Math.hypot(this.vel.x, this.vel.z);
+    this.lean = damp(this.lean, clamp(-this.turnRate * sp * 0.035, -0.28, 0.28), 8, dt);
+    this.object.rotation.z = this.lean;
   }
 }
