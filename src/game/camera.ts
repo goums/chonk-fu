@@ -47,21 +47,24 @@ export class FollowCamera {
     const sx = aSpeaks ? ux : -ux, sz = aSpeaks ? uz : -uz; // speaker -> listener
     // look between the speaker's face and the midpoint, so both stay in frame
     const look = new THREE.Vector3(
-      speaker.x * 0.7 + listener.x * 0.3,
-      speaker.y + sHead * 0.82,
-      speaker.z * 0.7 + listener.z * 0.3,
+      speaker.x * 0.6 + listener.x * 0.4,
+      speaker.y + sHead * 0.72,
+      speaker.z * 0.6 + listener.z * 0.4,
     );
-    // candidate framings, best first: over the listener's shoulder (our side, then the other side),
-    // then a side-on two-shot (both sides), then a closer high shot; keep the first with a clear view
-    const eye = listener.y + Math.max(lHead, sHead * 0.8) * 0.95 + 0.25;
-    const back = 2.3 + L * 0.35, off = 1.5 + L * 0.3;
+    // candidate framings, best first: a profile two-shot angled a little toward the speaker (both faces
+    // visible, on our side of the line, then the other side), then over-the-listener's-shoulder shots,
+    // then a higher close shot; the first with a clear view wins
+    const eye = Math.max(a.y, b.y) + Math.max(lHead, sHead) * 0.72 + 0.15;
+    const Lf = Math.max(L, 1.4); // framing distance never collapses when they stand close
     const mid = new THREE.Vector3((a.x + b.x) / 2, eye, (a.z + b.z) / 2);
     const cands: THREE.Vector3[] = [];
+    const away = 2.4 + Lf * 0.9;
     for (const side of [this.shotSide, -this.shotSide])
-      cands.push(new THREE.Vector3(listener.x + sx * back + nx * side * off, eye, listener.z + sz * back + nz * side * off));
+      cands.push(new THREE.Vector3(mid.x + nx * side * away + sx * 0.55 * Lf, eye, mid.z + nz * side * away + sz * 0.55 * Lf));
+    const back = 2.3 + Lf * 0.35, off = 1.7 + Lf * 0.3;
     for (const side of [this.shotSide, -this.shotSide])
-      cands.push(new THREE.Vector3(mid.x + nx * side * (2.6 + L * 0.8), eye - 0.1, mid.z + nz * side * (2.6 + L * 0.8)));
-    cands.push(new THREE.Vector3(listener.x + sx * 1.4, eye + 1.2, listener.z + sz * 1.4));
+      cands.push(new THREE.Vector3(listener.x + sx * back + nx * side * off, eye + 0.2, listener.z + sz * back + nz * side * off));
+    cands.push(new THREE.Vector3(mid.x + nx * this.shotSide * 2.2, eye + 1.6, mid.z + nz * this.shotSide * 2.2));
     const clear = (p: THREE.Vector3) => {
       // the camera needs elbow room (nothing right in front of the lens), not just a clear line
       if (pointBlocked(p.x, p.y, p.z, 1.3) || pointBlocked(p.x, p.y - 1.2, p.z, 1.3)) return false;

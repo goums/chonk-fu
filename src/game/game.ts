@@ -447,7 +447,19 @@ export class Game {
       }
       const partner = this.dialogPartner();
       const face = partner ? Math.atan2(partner.pos.x - this.player.pos.x, partner.pos.z - this.player.pos.z) : null;
-      const still = { ...intent, moveX: 0, moveZ: 0, punch: false, kick: false, belly: false, jump: false, interact: false, face };
+      // keep a comfortable talking distance: if we walked right up to their nose, take a few steps back
+      // (a real walk, still facing them, so the dialog camera can frame both)
+      let backX = 0, backZ = 0;
+      if (partner) {
+        const P = this.player.pos, dx = P.x - partner.pos.x, dz = P.z - partner.pos.z, d = Math.hypot(dx, dz) || 1;
+        if (d < 1.9) {
+          // world direction -> camera-relative stick input (inverse of Player.step's mapping)
+          const sn = Math.sin(camYaw), cs = Math.cos(camYaw), wx = dx / d, wz = dz / d;
+          backX = cs * wx - sn * wz;
+          backZ = -sn * wx - cs * wz;
+        }
+      }
+      const still = { ...intent, moveX: backX, moveZ: backZ, run: false, sprint: false, punch: false, kick: false, belly: false, jump: false, interact: false, face };
       this.player.step(dt, still, camYaw);
       const ctx = this.npcContext();
       for (const n of this.npcs) n.update(dt, ctx);

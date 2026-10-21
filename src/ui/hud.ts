@@ -73,7 +73,7 @@ const FLOURISH = `<svg class="flourish" viewBox="0 0 400 16" preserveAspectRatio
   <circle cx="183" cy="8" r="1.6" fill="currentColor"/><circle cx="217" cy="8" r="1.6" fill="currentColor"/>
 </svg>`;
 
-interface Slot { el: HTMLElement; t: number; dur: number }
+interface Slot { el: HTMLElement; t: number; dur: number; replay?: { kind: 'discover' | 'quest'; text: string } }
 interface FeedItem { el: HTMLElement; t: number; key: string; n: number }
 
 const SEG = 5, R = 46, CIRC = 2 * Math.PI * R, GAP = 3.2; // belly ring: 5 segments of 20 chi
@@ -374,17 +374,24 @@ export class Hud {
   private tickNotes(dt: number) {
     // cinematic slot: one region reveal or quest banner at a time, shortened when others wait
     const s = this.stageCur;
+    // a conversation starting mid-reveal: tuck the banner away and replay it afterwards
+    if (s && this.game.dialog && s.t < s.dur && s.replay) {
+      this.stageQ.unshift(s.replay);
+      s.t = s.dur;
+      s.replay = undefined;
+    }
     if (s) {
       s.t += dt;
       const dur = this.stageQ.length ? Math.min(s.dur, 2.6) : s.dur;
       if (s.t > dur && !s.el.classList.contains('out')) s.el.classList.add('out');
       if (s.t > dur + 0.9) { s.el.remove(); this.stageCur = null; }
     }
-    if (!this.stageCur && this.stageQ.length) {
+    // region reveals and quest banners wait until the conversation is over (they'd cover the scene)
+    if (!this.stageCur && this.stageQ.length && !this.game.dialog) {
       const n = this.stageQ.shift()!;
       const e = n.kind === 'discover' ? this.discoverEl(n.text) : this.questEl(n.text);
       this.stageLayer.appendChild(e);
-      this.stageCur = { el: e, t: 0, dur: n.kind === 'discover' ? 4.4 : 4 };
+      this.stageCur = { el: e, t: 0, dur: n.kind === 'discover' ? 4.4 : 4, replay: n };
     }
 
     const f = this.infoCur;
