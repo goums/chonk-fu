@@ -14,6 +14,10 @@ const GRAVITY = 24;
 /** forward speed (m/s) during the belly jump's flight */
 const BELLY_HOP_SPEED = 3.6;
 let nextId = 1;
+/** a new game numbers its fighters from 1 again (ids are AI targets, replays must match) */
+export function resetFighterIds() {
+  nextId = 1;
+}
 
 export class Fighter {
   id = nextId++;

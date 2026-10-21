@@ -13,6 +13,9 @@ import { buildSky } from './world/sky';
 import { buildWorld } from './world/world';
 import type { Agent } from './agent/agent';
 import { AgentPanel } from './agent/panel';
+import { allColliders, removeCollider } from './game/colliders';
+import { resetFighterIds } from './game/fighter';
+import { tokens } from './game/enemy';
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
@@ -37,8 +40,26 @@ const { sun, water, grass } = buildWorld(scene);
 const COMPARE = new URLSearchParams(location.search).has('compare');
 await preloadModels(['chonk', 'tiger', 'wolf', 'tortoise', 'duck', 'pig', 'bunny', ...(COMPARE ? ['chonk-tripo', 'chonk-meshy', 'chonk-open', 'chonk-hunyuan'] : [])]);
 await initMotionLibrary();
-const game = new Game(scene);
-const hud = new Hud(document.getElementById('hud')!, game);
+// what the world owns: a new game removes everything else (characters, items, effects, their colliders)
+const worldObjects = new Set(scene.children);
+const worldColliders = new Set(allColliders);
+let game = new Game(scene);
+let hud = new Hud(document.getElementById('hud')!, game);
+/** start over in place (replays need a fresh world; no page reload, so the music keeps playing) */
+function newGame() {
+  for (const o of [...scene.children]) if (!worldObjects.has(o)) scene.remove(o);
+  for (const c of [...allColliders]) if (!worldColliders.has(c)) removeCollider(c);
+  resetFighterIds();
+  tokens.holders.clear();
+  game = new Game(scene);
+  const root = document.getElementById('hud')!;
+  root.innerHTML = '';
+  root.className = '';
+  hud = new Hud(root, game);
+  follow.yaw = 0;
+  Object.assign((window as unknown as { chonk: object }).chonk, { game, player: game.player });
+  return game;
+}
 const audio = new GameAudio(); // starts on the first key / pointer press, M mutes
 const lineup: (() => void)[] = [];
 // ?compare: the three Le Chonk candidates side by side; keys 1/2/3 swap the playable one
@@ -106,7 +127,7 @@ let agent: Agent | null = null;
 const panel = new AgentPanel(game, (a) => {
   agent = a;
   external.active = !!a;
-});
+}, newGame, audio);
 if (HEADLESS) panel.el.style.display = 'none';
 Object.assign(window, { chonkPanel: panel });
 const openPanel = async () => {
@@ -117,7 +138,7 @@ if (params.has('agent') || params.has('replay') || params.has('play')) {
   const p = await openPanel();
   const replay = params.get('replay');
   const play = params.get('play');
-  if (replay) fetch(`./runs/${replay}`).then((r) => r.json()).then((run) => p.start(run));
+  if (replay) p.watch(replay);
   else if (play) p.start(null, play);
 }
 function tick(n: number, intent: Partial<Intent> = {}) {
@@ -162,7 +183,7 @@ function frame(now: number) {
   grass.update(time);
   for (const f of lineup) f();
   audio.update(game, real, follow.yaw); // reads this frame's game.events before they are cleared
-  panel.soundHint(!!agent && !audio.muted && audio.ctx?.state !== 'running');
+  panel.syncSound(!!agent && !audio.muted && audio.ctx?.state !== 'running');
   hud.update(real, follow.yaw);
   game.events.length = 0;
   if (post) post.render();

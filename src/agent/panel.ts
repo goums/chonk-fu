@@ -3,7 +3,8 @@
 import './agent.css';
 import type { Game } from '../game/game';
 import { Agent, type RunFile, type RunStats, type TurnRecord } from './agent';
-import { GITHUB_MARK, MISTRAL_M } from '../ui/icons';
+import { GITHUB_MARK, MISTRAL_M, SOUND_ON, SOUND_OFF } from '../ui/icons';
+import type { GameAudio } from '../audio';
 
 const MODELS = [
   { provider: 'mistral', id: 'mistral-large-4', label: 'Mistral Large 4' },
@@ -44,27 +45,40 @@ export class AgentPanel {
   private status: HTMLDivElement;
   private now: HTMLDivElement;
   private speed = 2;
-  private replayFile: string | null = null;
 
-  constructor(private game: Game, private onRun: (a: Agent | null) => void) {
+  /** in dev the Vite proxy has the key; on the website the player brings one */
+  private get canPlayLive() {
+    if (import.meta.env.DEV) return true;
+    return !!this.el.querySelector<HTMLInputElement>('.ag-key')?.value.trim();
+  }
+
+  constructor(
+    public game: Game,
+    private onRun: (a: Agent | null) => void,
+    /** a fresh world, in place (no reload: the music keeps playing) */
+    private newGame: () => Game,
+    private audio: GameAudio,
+  ) {
     const el = (this.el = document.createElement('div'));
     el.className = 'ag-panel folded';
     el.innerHTML = `
       <div class="ag-head">
-        <button class="hud-btn ag-play" title="Mistral plays the game for you">${MISTRAL_M}<span>Let Chonk play</span></button>
+        <button class="hud-btn ag-play invite" title="Mistral plays the game for you">${MISTRAL_M}<span>Let Chonk play</span></button>
         <span class="ag-sound">Click for music</span>
+        <button class="hud-btn icon ag-mute" title="Sound on / off (M)">${SOUND_ON}</button>
         <a class="hud-btn icon" href="https://github.com/goums/chonk-fu" target="_blank" rel="noopener" title="Source code on GitHub">${GITHUB_MARK}</a>
-        <button class="ag-min" title="Show / hide the AI log">▴</button>
+        <button class="hud-btn icon ag-min" title="Show / hide the AI panel">▴</button>
       </div>
       <div class="ag-body">
         <div class="ag-row">
-          <select class="ag-model-sel" title="Model">${MODELS.map((m) => `<option value="${m.id}">${m.label}</option>`).join('')}</select>
+          <button class="ag-watch">▶ Watch a run</button>
+          <select class="ag-replay" title="Recorded runs"></select>
         </div>
-        ${import.meta.env.DEV ? '' : '<div class="ag-row"><input class="ag-key" type="password" placeholder="Mistral API key (stays in this browser)" /></div>'}
         <div class="ag-row">
-          <select class="ag-replay"><option value="">Replay a run…</option></select>
+          <select class="ag-model-sel" title="Model for live play">${MODELS.map((m) => `<option value="${m.id}">${m.label}</option>`).join('')}</select>
           <span class="ag-speed">${[1, 2, 4, 8].map((s) => `<button data-s="${s}" class="${s === 2 ? 'on' : ''}">${s}×</button>`).join('')}</span>
         </div>
+        ${import.meta.env.DEV ? '' : '<div class="ag-row"><input class="ag-key" type="password" placeholder="Mistral API key to play live (stays here)" /></div>'}
         <div class="ag-status">Idle</div>
         <div class="ag-now"></div>
         <div class="ag-log"></div>
@@ -80,11 +94,19 @@ export class AgentPanel {
     const play = el.querySelector<HTMLButtonElement>('.ag-play')!;
     play.addEventListener('click', () => {
       play.blur(); // Space / Enter must not press it again
+      play.classList.remove('invite');
+      this.show();
       if (this.agent) this.stop();
-      else {
-        this.show();
-        this.start(null);
-      }
+      else if (this.canPlayLive) this.start(null);
+      // no key on the website: watching a recorded run is one click away
+      else this.setStatus('Watch a recorded run, or paste a Mistral API key to play live.');
+    });
+    // invite a click for the first 20 s
+    setTimeout(() => play.classList.remove('invite'), 20000);
+    const mute = el.querySelector<HTMLButtonElement>('.ag-mute')!;
+    mute.addEventListener('click', () => {
+      mute.blur();
+      this.audio.setMuted(!this.audio.muted);
     });
     el.querySelectorAll<HTMLButtonElement>('.ag-speed button').forEach((b) =>
       b.addEventListener('click', () => {
@@ -97,15 +119,13 @@ export class AgentPanel {
     fetch('./runs/index.json')
       .then((r) => (r.ok ? r.json() : []))
       .then((list: { file: string; label: string }[]) => {
+        // the newest run is selected: watching is one click
         for (const r of list) sel.insertAdjacentHTML('beforeend', `<option value="${esc(r.file)}">${esc(r.label)}</option>`);
       })
       .catch(() => {});
-    sel.addEventListener('change', async () => {
-      if (!sel.value) return;
-      this.replayFile = sel.value;
-      // a replay needs a fresh world: reload with the run in the URL
-      if (this.game.t > 0.5 || this.agent) location.href = `?replay=${encodeURIComponent(sel.value)}`;
-      else this.start((await (await fetch(`./runs/${sel.value}`)).json()) as RunFile);
+    el.querySelector<HTMLButtonElement>('.ag-watch')!.addEventListener('click', (e) => {
+      (e.currentTarget as HTMLButtonElement).blur();
+      if (sel.value) this.watch(sel.value);
     });
     // keys typed in the panel must not move Le Chonk
     el.addEventListener('keydown', (e) => e.stopPropagation());
@@ -122,9 +142,28 @@ export class AgentPanel {
     this.el.querySelector('.ag-min')!.textContent = '▴';
   }
 
-  /** browsers keep the music off after a page load until a click: say so while the AI plays */
-  soundHint(show: boolean) {
-    this.el.classList.toggle('mute', show);
+  /** once per frame: the sound button, and a hint when the browser still holds the music back */
+  syncSound(hint: boolean) {
+    this.el.classList.toggle('mute', hint);
+    const off = this.audio.muted;
+    if (off !== this.shownMuted) {
+      this.shownMuted = off;
+      const b = this.el.querySelector('.ag-mute')!;
+      b.innerHTML = off ? SOUND_OFF : SOUND_ON;
+      b.classList.toggle('off', off);
+    }
+  }
+  private shownMuted = false;
+
+  /** replay a recorded run in a fresh world */
+  async watch(file: string) {
+    if (this.agent) {
+      this.stop();
+      // let the current run wind down
+      while (this.agent) await new Promise((r) => setTimeout(r, 50));
+    }
+    const run = (await (await fetch(`./runs/${file}`)).json()) as RunFile;
+    this.start(run);
   }
 
   private setPlaying(on: boolean) {
@@ -144,11 +183,8 @@ export class AgentPanel {
     if (model) sel.value = model;
     const want = model ?? sel.value;
     const m = want === 'script' ? { provider: 'mistral' as const, id: 'script', label: 'Scripted player' } : MODELS.find((x) => x.id === want) ?? MODELS[0];
-    if (replay && this.game.t > 0.5) {
-      // a replay needs the fresh world it was recorded in
-      location.href = `?replay=${encodeURIComponent(this.replayFile ?? '')}`;
-      return;
-    }
+    // a replay needs the fresh world it was recorded in
+    if (replay && this.game.t > 0) this.game = this.newGame();
     const fresh = this.game.t < 0.5;
     const keyEl = this.el.querySelector<HTMLInputElement>('.ag-key');
     const apiKey = keyEl?.value.trim() || undefined;
