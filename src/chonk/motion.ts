@@ -1,6 +1,7 @@
 // Mocap-driven animation for the pipeline characters: CC0 human clips (Mesh2Motion / Quaternius,
 // retargeted in retarget.ts) on an AnimationMixer, with a procedural layer on top for what mocap can't
-// know about a chubby cat: breathing, belly jiggle, the tail, and the belly bump special.
+// know about a chubby cat: breathing, belly jiggle, the tail, and the belly jump special (a somersault
+// that lands belly-first, see animator.ts bellyJump).
 // Same update(AnimInput, dt) interface as the procedural Animator, so fighters and NPCs use either.
 //
 // Locomotion: Walk and Jog share one gait phase (they start on the same foot), so the blend never
@@ -14,7 +15,7 @@
 // NPC body language: AnimInput.gesture plays an upper-body clip over idle / walk, AnimInput.lookAt turns
 // the head (and a little of the chest) toward a point.
 import * as THREE from 'three';
-import { Animator, type AnimInput, type MoveName } from './animator';
+import { Animator, applyBellyJump, bellyJump, MOVES, type AnimInput, type MoveName } from './animator';
 import type { ChonkRig } from './model';
 import { clipGroundSpeed, describeRig, loadAnimLibrary, retargetClips, type AnimLibrary, type TargetRig } from './retarget';
 import { clamp, damp } from '../core/math';
@@ -30,6 +31,8 @@ export async function initMotionLibrary() {
 
 const LOCO = { idle: 'Idle_A', fight: 'Fighting Idle', talk: 'Idle_Talking', walk: 'Walk', jog: 'Jog' };
 const MOVE_CLIP: Partial<Record<MoveName, string>> = { jab: 'Punch_Jab', cross: 'Punch_Cross', kick: 'Kick_Breach', slam: 'Attack_Ground_Pound', belly: 'Power Up' };
+/** stance clips re-centred upright, with the chest's remaining forward lean (rad); the jog keeps its lean */
+const STANCE: Record<string, number> = { [LOCO.idle]: 0.04, [LOCO.talk]: 0.04, [LOCO.fight]: 0.1, [LOCO.walk]: 0.08 };
 type Gesture = NonNullable<AnimInput['gesture']>;
 /** gesture -> clips (alternating when there are several), played on the upper body only */
 const GESTURE_CLIP: Record<Gesture, string[]> = {
@@ -75,7 +78,10 @@ function clipsFor(rig: ChonkRig): ClipSet | null {
   let set = cache.get(key);
   if (!set) {
     const names = USED.filter((n) => lib!.clips.has(n));
-    const clips = retargetClips(lib, rig, names);
+    // stance loops stand up straight (the human's relaxed hunch would tip the whole belly forward)
+    const gestures = new Set(Object.values(GESTURE_CLIP).flat());
+    const clips = retargetClips(lib, rig, names, (n) =>
+      n in STANCE ? { upright: STANCE[n] } : gestures.has(n) ? { upright: STANCE[LOCO.idle], uprightFrom: 'start' } : {});
     const T = describeRig(rig);
     const speed: Record<string, number> = {}, cycle: Record<string, number> = {};
     for (const n of [LOCO.walk, LOCO.jog]) {
@@ -235,7 +241,7 @@ export class Motion implements CharacterAnimator {
         const clip = MOVE_CLIP[inp.move];
         if (clip && this.act.has(clip)) {
           // fit the clip's strike into the move's gameplay duration (fighter.ts timing stays the boss)
-          const moveDur = { jab: 0.32, cross: 0.4, kick: 0.55, belly: 0.85, slam: 0.5 }[inp.move];
+          const moveDur = MOVES[inp.move].duration;
           const dur = this.set.clips.get(clip)!.duration;
           this.playOnce(clip, 0.06, clamp((dur * 0.75) / moveDur, 0.8, 4), inp.move);
         }
@@ -303,7 +309,9 @@ export class Motion implements CharacterAnimator {
     this.swim = clamp(this.swim + (swimming ? dt : -dt) / 0.25, 0, 1);
     if (swimming) this.swimPh += dt * Math.PI * 2 * (0.75 + inp.speed * 0.3);
     this.updateLook(inp, dt);
-    this.posture(ww, wj, stride);
+    const jump = inp.move === 'belly' && !inp.ko ? bellyJump(inp.moveT) : null;
+    this.posture(ww, wj, stride, jump);
+    applyBellyJump(r, jump ? inp.moveT : null);
     // breathing + belly jiggle: a damped spring driven by the hips' vertical acceleration
     const hy = r.hips.position.y;
     const vy = (hy - this.lastHipsY) / Math.max(dt, 1e-3);
@@ -314,7 +322,8 @@ export class Motion implements CharacterAnimator {
     this.belly += this.bellyV * dt;
     const breathe = Math.sin(inp.t * 2.2) * 0.012;
     let bump = 0;
-    if (inp.move === 'belly') bump = Math.sin(clamp((inp.moveT - 0.35) / 0.35, 0, 1) * Math.PI) * 0.12;
+    // the belly spreads on the belly-first landing
+    if (jump) bump = Math.sin(clamp((inp.moveT - 0.53) / 0.3, 0, 1) * Math.PI) * 0.14;
     const sq = 1 + breathe + this.belly + bump;
     r.body.scale.set(1 + (sq - 1) * 0.6 + bump * 0.5, 1 / Math.sqrt(sq), 1 + (sq - 1) * 0.8 + bump);
     // tail: lazy sway, livelier when running; trailing flat on the water (rudder swish) when swimming
@@ -399,10 +408,10 @@ export class Motion implements CharacterAnimator {
    * Post-mixer pose corrections, in rig.root space: stride scaling, upright running, hip height, walk hop
    * and waddle, then the swim pose blended over everything. ww / wj: live walk / jog weights.
    */
-  private posture(ww: number, wj: number, stride: number) {
+  private posture(ww: number, wj: number, stride: number, jump: ReturnType<typeof bellyJump> | null) {
     const r = this.rig, S = this.set, W = this.W;
     const loco = ww + wj, sw = this.swim * this.swim * (3 - 2 * this.swim);
-    if (loco < 0.01 && sw <= 0 && this.lookW < 1e-3) return;
+    if (loco < 0.01 && sw <= 0 && this.lookW < 1e-3 && !jump) return;
     for (const j of JOINTS) {
       const p = PARENT[j];
       W[j].multiplyQuaternions(p ? W[p] : S.hipsParent, r[j].quaternion);
@@ -471,8 +480,21 @@ export class Motion implements CharacterAnimator {
       target('kneeR', 1.45 - kick);
       hips.set(lerp(hips.x, 0, sw), lerp(hips.y, r.hipBase + Math.sin(this.swimPh * 2) * 0.015, sw), lerp(hips.z, 0, sw));
     }
+    if (jump && (jump.tuck > 0 || jump.flop > 0)) {
+      // 5. belly jump: curled up for the somersault, then stretched out for the belly flop (arms
+      //    forward, legs back). The flip itself turns the whole rig afterwards (applyBellyJump)
+      const target = (j: J, w: number, x: number, y = 0, z = 0) => {
+        if (w <= 0) return;
+        _e.set(x, y, z, 'XYZ');
+        _q.setFromEuler(_e).multiply(S.rest[j]);
+        W[j].slerp(_q, w);
+      };
+      for (const [w, pose] of [[jump.tuck, TUCK], [jump.flop, FLOP]] as const) {
+        for (const [j, x, y, z] of pose) target(j, w, x, y, z);
+      }
+    }
     if (this.lookW >= 1e-3) {
-      // 5. look at: 30 % of the turn in the chest, the rest in the neck; the nod about the turned side axis
+      // 6. look at: 30 % of the turn in the chest, the rest in the neck; the nod about the turned side axis
       const yaw = this.lookYaw * this.lookW, pitch = this.lookPitch * this.lookW;
       rotate('body', _q.setFromAxisAngle(_axisY, yaw * 0.3));
       _v.set(1, 0, 0).applyAxisAngle(_axisY, yaw);
@@ -484,6 +506,18 @@ export class Motion implements CharacterAnimator {
     }
   }
 }
+
+/** belly jump poses: root-space rotations from the bind pose (x: + = backward for a hanging limb) */
+const TUCK: [J, number, number, number][] = [
+  ['body', 0.35, 0, 0], ['head', 0.6, 0, 0],
+  ['legL', -1.5, 0, 0], ['kneeL', 0.4, 0, 0], ['legR', -1.5, 0, 0], ['kneeR', 0.4, 0, 0],
+  ['shoulderL', -1.1, -0.5, 0], ['elbowL', -1.6, -0.5, 0], ['shoulderR', -1.1, 0.5, 0], ['elbowR', -1.6, 0.5, 0],
+];
+const FLOP: [J, number, number, number][] = [
+  ['body', -0.2, 0, 0], ['head', -0.5, 0, 0],
+  ['legL', 1.2, 0, 0], ['kneeL', 1.3, 0, 0], ['legR', 1.2, 0, 0], ['kneeR', 1.3, 0, 0],
+  ['shoulderL', -2.4, -0.3, 0], ['elbowL', -2.4, -0.3, 0], ['shoulderR', -2.4, 0.3, 0], ['elbowR', -2.4, 0.3, 0],
+];
 
 const _d = new THREE.Quaternion(), _q = new THREE.Quaternion(), _v = new THREE.Vector3(), _e = new THREE.Euler();
 const _axisX = new THREE.Vector3(1, 0, 0), _axisY = new THREE.Vector3(0, 1, 0), _p = new THREE.Vector3();

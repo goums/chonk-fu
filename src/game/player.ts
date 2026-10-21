@@ -1,5 +1,5 @@
 // Le Chonk, the playable hero: camera-relative movement, jumps, and a kung-fu move set
-// (jab -> cross -> kick combo, belly bump special, ground slam from the air).
+// (jab -> cross -> kick combo, belly jump special, ground slam from the air).
 import type { MoveName } from '../chonk/animator';
 import { buildCharacter } from '../chonk/characters';
 import type { Intent } from '../core/input';
@@ -18,7 +18,7 @@ export class Player extends Fighter {
   /** queued follow-up in the jab -> cross -> kick combo */
   private comboNext: MoveName | null = null;
   private comboStep = 0;
-  /** belly bump needs chi: filled by landing hits */
+  /** belly jump needs chi: filled by landing hits */
   chi = 50;
   bellyCost = 40;
   regenDelay = 0;

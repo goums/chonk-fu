@@ -2,7 +2,7 @@
 // swimming in deep water (river / pond).
 // Le Chonk (Player), the bandits and the boss (Enemy) all extend this.
 import * as THREE from 'three';
-import { MOVES, type MoveName } from '../chonk/animator';
+import { BELLY_LAND, BELLY_TAKEOFF, MOVES, type MoveName } from '../chonk/animator';
 import { makeAnimator, type CharacterAnimator } from '../chonk/motion';
 import type { ChonkRig } from '../chonk/model';
 import { angleDelta, clamp, damp } from '../core/math';
@@ -11,6 +11,8 @@ import { groundAt } from '../world/world';
 import { resolve } from './colliders';
 
 const GRAVITY = 24;
+/** forward speed (m/s) during the belly jump's flight */
+const BELLY_HOP_SPEED = 3.6;
 let nextId = 1;
 
 export class Fighter {
@@ -46,7 +48,7 @@ export class Fighter {
   protected slamPending = false;
   /**
    * floating in deep water: swim pose (motion.ts), 45 % speed, no attacks, Space = splash-hop. Not
-   * grounded while swimming (so no jumps / slams / belly bumps start), the anim gets its own flag.
+   * grounded while swimming (so no jumps / slams / belly jumps start), the anim gets its own flag.
    */
   swimming = false;
 
@@ -177,11 +179,18 @@ export class Fighter {
         this.heading += step;
       } else this.turnRate = 0;
     }
-    // lunge on the strike frames
-    if (this.move && this.strikeActive && this.move !== 'slam') {
-      const lunge = this.move === 'belly' ? 9 : 4;
-      this.vel.x += Math.sin(this.heading) * lunge * dt * 6;
-      this.vel.z += Math.cos(this.heading) * lunge * dt * 6;
+    if (this.move === 'belly') {
+      // the belly jump travels while airborne (the hop itself is animation: the body stays grounded
+      // for gameplay) and lands ~1.4 m ahead, where the strike goes off
+      const u = this.moveProgress();
+      if (u > BELLY_TAKEOFF && u < BELLY_LAND) {
+        this.vel.x = Math.sin(this.heading) * BELLY_HOP_SPEED;
+        this.vel.z = Math.cos(this.heading) * BELLY_HOP_SPEED;
+      }
+    } else if (this.move && this.strikeActive && this.move !== 'slam') {
+      // lunge on the strike frames
+      this.vel.x += Math.sin(this.heading) * 4 * dt * 6;
+      this.vel.z += Math.cos(this.heading) * 4 * dt * 6;
     }
     if (jump && this.grounded && !this.move && this.canAct()) {
       this.vel.y = 8.5;

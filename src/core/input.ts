@@ -2,9 +2,9 @@
 //
 // Controls: WASD / ZQSD / arrows move (run by default), hold Shift to sprint, hold Alt or toggle C to walk,
 // Space jumps (splash-hop out of deep water), J or a left click punches (J, J, J = jab, cross, kick),
-// K or a right click belly bumps (L still works), Enter talks / advances dialog.
+// K or a right click belly jumps (L still works), Enter talks / advances dialog.
 // The mouse never gets captured: dragging with the left or right button held orbits the camera, the
-// wheel zooms; a click (press + release without moving) is the punch / belly bump.
+// wheel zooms; a click (press + release without moving) is the punch / belly jump.
 export interface Intent {
   moveX: number; // camera-relative strafe (-1..1)
   moveZ: number; // camera-relative forward (-1..1)

@@ -1,4 +1,4 @@
-// DOM heads-up display, cinematic style: portrait + health + belly-bump ring, compass with objective
+// DOM heads-up display, cinematic style: portrait + health + belly-jump ring, compass with objective
 // markers, quest tracker with inventory, queued notifications (region reveals, quest banners, item feed,
 // info lines), letterboxed dialog, interaction prompt, boss bar and the ending card.
 import type { Game } from '../game/game';
@@ -149,7 +149,7 @@ export class Hud {
     this.hpFill = el('div', 'hp-fill', hp);
     const row = el('div', 'hp-row', vit);
     this.hpNum = el('span', 'hp-num', row);
-    this.bellyTag = el('span', 'belly-tag', row, '<kbd>K</kbd>Belly Bump');
+    this.bellyTag = el('span', 'belly-tag', row, '<kbd>K</kbd>Belly Jump');
 
     // ---- compass
     const compass = el('div', 'compass hud-fade', root);
@@ -193,7 +193,7 @@ export class Hud {
     this.dlgNext = el('div', 'dlg-next', inner, '<kbd class="wide">Enter</kbd><span>▸</span>');
 
     el('div', 'help', root, [
-      ['Arrows', 'move'], ['Shift', 'sprint'], ['Space', 'jump'], ['J', 'punch (combo)'], ['K', 'belly bump'], ['Enter', 'talk'], ['', 'drag mouse to look'],
+      ['Arrows', 'move'], ['Shift', 'sprint'], ['Space', 'jump'], ['J', 'punch (combo)'], ['K', 'belly jump'], ['Enter', 'talk'], ['', 'drag mouse to look'],
     ].map(([k, v]) => `<span>${k ? `<kbd>${k}</kbd>` : ''}${v}</span>`).join(''));
     this.end = el('div', 'end', root);
   }
@@ -226,7 +226,7 @@ export class Hud {
     this.portrait.classList.toggle('hurt', this.hurtT > 0);
     this.portrait.parentElement!.classList.toggle('low', frac < 0.3);
 
-    // ---- belly-bump ring
+    // ---- belly-jump ring
     const segLen = (CIRC * (360 / SEG - GAP)) / 360;
     this.chiSegs.forEach((c, i) => {
       const f = Math.max(0, Math.min(1, (P.chi - i * (100 / SEG)) / (100 / SEG)));
@@ -236,7 +236,7 @@ export class Hud {
     // Dragon Chonk: a golden portrait and the Dragon Belly
     if (this.player.classList.contains('dragon') !== g.dragon) {
       this.player.classList.toggle('dragon', g.dragon);
-      this.bellyTag.innerHTML = g.dragon ? '<kbd>K</kbd>Dragon Belly' : '<kbd>K</kbd>Belly Bump';
+      this.bellyTag.innerHTML = g.dragon ? '<kbd>K</kbd>Dragon Belly' : '<kbd>K</kbd>Belly Jump';
     }
     this.flash.style.opacity = g.flash > 0.001 ? String(Math.min(1, g.flash * 1.2)) : '0';
     this.chiRing.classList.toggle('ready', ready);

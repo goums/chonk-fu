@@ -8,7 +8,8 @@
 //    hinges. Near the relaxed pose the limb is rotated onto the character's sculpted rest pose (our
 //    arms reach around the belly, a human's hang at its sides), fading out as the limb moves away, and
 //    the sculpted elbow / knee bend is added to the source one;
-//  - hips / body / head copy the source world-rotation change from rest of pelvis / spine_03 / head;
+//  - hips / body / head copy the source world-rotation change from rest of pelvis / spine_03 / head
+//    (stance clips: re-centred on the upright sculpted torso, see RetargetOptions.upright);
 //  - hips translation = pelvis offset from rest scaled by the leg-length ratio, horizontal travel
 //    filtered so locomotion plays in place; while the source stands upright the height is corrected so
 //    the lowest sole sits at the (scaled) height of the lowest source foot.
@@ -83,6 +84,20 @@ export interface RetargetOptions {
   rootMotion?: 'vertical' | 'lateral' | 'full';
   /** keyframe rate of the output clips (default 30) */
   fps?: number;
+  /**
+   * Stance clips (idle / walk loops): re-centre the torso pitch on the sculpted rest. The torso copies
+   * the source's rotation change from its T-pose, and a relaxed human's upper back curves ~15 deg
+   * forward of it (pelvis ~5 deg back): on our one-bone torso that tips the whole belly and head
+   * forward. When set, the clip's mean pitch of the pelvis / spine / head is removed (sway and
+   * breathing stay) and the chest keeps this forward lean (rad).
+   */
+  upright?: number;
+  /**
+   * what `upright` measures: the clip's mean pitch (loops, default) or its first frame (one-shot
+   * gestures that start from the relaxed stance; there only a forward hunch of the chest / head is
+   * removed, an expressive lean back is kept)
+   */
+  uprightFrom?: 'mean' | 'start';
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -123,7 +138,7 @@ export function animLibraryFromGLTF(gltf: GLTF): AnimLibrary {
   return lib;
 }
 
-const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _q = new THREE.Quaternion();
+const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _q = new THREE.Quaternion(), _axisX = new THREE.Vector3(1, 0, 0);
 
 /** sample a source clip (cached) */
 export function sampleClip(lib: AnimLibrary, name: string): SampledClip {
@@ -356,10 +371,10 @@ const FEET = ['foot_l', 'ball_l', 'foot_r', 'ball_r'];
  * Retarget library clips onto a rig. Returns AnimationClips (keyed by source clip name) for an
  * AnimationMixer whose root is rig.root. All clips by default.
  */
-export function retargetClips(lib: AnimLibrary, rig: ChonkRig, names: string[] = lib.names, opts: RetargetOptions = {}): Map<string, THREE.AnimationClip> {
+export function retargetClips(lib: AnimLibrary, rig: ChonkRig, names: string[] = lib.names, opts: RetargetOptions | ((name: string) => RetargetOptions) = {}): Map<string, THREE.AnimationClip> {
   const T = describeRig(rig);
   const out = new Map<string, THREE.AnimationClip>();
-  for (const n of names) out.set(n, retargetClip(lib, T, n, opts));
+  for (const n of names) out.set(n, retargetClip(lib, T, n, typeof opts === 'function' ? opts(n) : opts));
   return out;
 }
 
@@ -408,6 +423,21 @@ export function retargetClip(lib: AnimLibrary, T: TargetRig, name: string, opts:
   const legs = limbs.filter((L) => L.l.leg);
   const soleRest = Math.min(...legs.map((L) => T.restPos[L.l.low].y + T.seg[L.l.low].dir.y * T.seg[L.l.low].len));
   const srcRestInv = Object.fromEntries(SPINE.map(([, b]) => [b, lib.restQuat[b].clone().invert()]));
+  // upright stance: a pitch (about the side axis) that cancels each spine bone's mean forward lean
+  const pitchFix = Object.fromEntries(SPINE.map(([j, b]) => {
+    const fix = new THREE.Quaternion();
+    if (opts.upright !== undefined) {
+      const start = opts.uprightFrom === 'start', n = start ? 1 : s.frames;
+      let sum = 0;
+      for (let i = 0; i < n; i++) {
+        _w.set(0, 1, 0).applyQuaternion(quat(s.quat[b], i, _q).multiply(srcRestInv[b]));
+        sum += Math.atan2(_w.z, _w.y);
+      }
+      const fwd = sum / n - (j === 'body' ? opts.upright : 0);
+      fix.setFromAxisAngle(_axisX, start && j !== 'hips' ? -Math.max(0, fwd) : -fwd);
+    }
+    return [b, fix];
+  }));
   const world = {} as Record<Joint, THREE.Quaternion>;
   for (const j of JOINTS) world[j] = new THREE.Quaternion();
   const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), du = new THREE.Vector3(), h = new THREE.Vector3(), dl = new THREE.Vector3();
@@ -425,7 +455,7 @@ export function retargetClip(lib: AnimLibrary, T: TargetRig, name: string, opts:
     const Q = (bone: string, out: THREE.Quaternion) => quat(s.quat[bone], i0, out).slerp(_q.fromArray(s.quat[bone], i1 * 4), k);
 
     // torso: world-rotation change from rest
-    for (const [j, src] of SPINE) world[j].multiplyQuaternions(Q(src, qs).multiply(srcRestInv[src]), T.restQuat[j]);
+    for (const [j, src] of SPINE) world[j].multiplyQuaternions(Q(src, qs).multiply(srcRestInv[src]).premultiply(pitchFix[src]), T.restQuat[j]);
     // limbs
     for (const L of limbs) {
       const [su, sl, se] = L.l.src;

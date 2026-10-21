@@ -272,7 +272,7 @@ export class Breakable extends Entity {
     this.obj.add(this.model);
     this.collider = addCircle(x, z, spec.radius * 0.9, -100, this.obj.position.y + spec.height);
   }
-  /** returns 'broken', 'hit', 'immune' (needs the belly bump) or 'locked' */
+  /** returns 'broken', 'hit', 'immune' (needs the belly jump) or 'locked' */
   hit(move: string): 'broken' | 'hit' | 'immune' | 'locked' {
     if (!this.alive) return 'immune';
     if (this.locked) {

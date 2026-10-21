@@ -1,6 +1,6 @@
 // Dragon Chonk: what the Dragon Noodles do to Le Chonk. He grows ~15 %, a golden electric aura crackles
 // around him (lightning arcs, additive glow, rising motes, a warm sheen on his fur), sparks fly from his
-// feet when he moves, and his belly bump becomes the Dragon Belly (a golden shockwave on the ground).
+// feet when he moves, and his belly jump becomes the Dragon Belly (a golden shockwave on the ground).
 // Every transparent piece is kept out of the AO pass (excludeFromAO), or it would show as grey quads.
 import * as THREE from 'three';
 import { clamp, rng } from '../core/math';

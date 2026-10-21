@@ -1,7 +1,7 @@
 // Procedural animation for Le Chonk's rig: every frame we compute a target pose from the movement state
-// and the current move (punch, kick, belly bump...), then ease each joint toward it. Cheap, smooth, and
+// and the current move (punch, kick, belly jump...), then ease each joint toward it. Cheap, smooth, and
 // deterministic (driven by sim time only).
-import type { Vector3 } from 'three';
+import * as THREE from 'three';
 import { clamp, damp } from '../core/math';
 import type { ChonkRig } from './model';
 
@@ -22,7 +22,7 @@ export interface AnimInput {
   /** in a fight stance (guard idle) */
   fighting?: boolean;
   /** world-space point the head (and a bit of the chest) should turn toward; null/undefined = straight ahead */
-  lookAt?: Vector3 | null;
+  lookAt?: THREE.Vector3 | null;
   /** expressive gesture: npc.ts holds the value for the gesture's duration (rising edge = start the clip,
    *  null in between); 'talk' stays set while the NPC's dialog line is being spoken */
   gesture?: 'wave' | 'nod' | 'yes' | 'talk' | 'cheer' | 'angry' | null;
@@ -70,9 +70,74 @@ export const MOVES: Record<MoveName, { duration: number; hit: [number, number]; 
   jab: { duration: 0.32, hit: [0.25, 0.5], reach: 1.5, damage: 8, knock: 3, arc: 1.0 },
   cross: { duration: 0.4, hit: [0.3, 0.55], reach: 1.6, damage: 11, knock: 5, arc: 1.0 },
   kick: { duration: 0.55, hit: [0.3, 0.6], reach: 1.9, damage: 15, knock: 7, arc: 2.2 },
-  belly: { duration: 0.85, hit: [0.42, 0.62], reach: 2.4, damage: 22, knock: 13, arc: 3.2 },
+  // the belly jump: the hit is the belly-first landing (BELLY_LAND)
+  belly: { duration: 1.0, hit: [0.55, 0.73], reach: 2.4, damage: 22, knock: 13, arc: 3.2 },
   slam: { duration: 0.5, hit: [0.0, 0.25], reach: 3.2, damage: 18, knock: 9, arc: Math.PI * 2 },
 };
+
+/** belly jump timeline (fractions of MOVES.belly.duration): crouch until the take-off, airborne until the landing */
+export const BELLY_TAKEOFF = 0.15;
+export const BELLY_LAND = 0.55;
+
+/**
+ * The belly jump's whole-body motion at progress u: a crouch (leaning back, squashed), a hop with a
+ * forward somersault, a belly-first landing, then a springy pop back up.
+ *  flip: forward pitch about the body centre (rad; a full turn plus the belly-flop angle at landing),
+ *  lift: height of that centre over its rest (in hip heights), squash: vertical scale of the whole
+ *  body, tuck: 0..1 curled-up pose, flop: 0..1 belly-flop pose (arms forward, legs back).
+ */
+export function bellyJump(u: number) {
+  const a = BELLY_TAKEOFF, b = BELLY_LAND, FLOP = 1.15, TURN = Math.PI * 2;
+  if (u < a) {
+    const k = curve(u / a, [[0, 0], [1, 1]]);
+    return { flip: -0.22 * k, lift: -0.06 * k, squash: 1 - 0.2 * k, tuck: 0.25 * k, flop: 0 };
+  }
+  if (u < b) {
+    const s = (u - a) / (b - a);
+    // spins fastest mid-air and still turning when the belly hits
+    const e = 0.35 * s + 0.65 * s * s * (3 - 2 * s);
+    return {
+      flip: -0.22 + (TURN + FLOP + 0.22) * e,
+      lift: 5.2 * s * (1 - s) - 0.06 * (1 - s) - 0.2 * s * s,
+      squash: curve(s, [[0, 0.8], [0.12, 1.12], [0.35, 1], [1, 1.04]]),
+      tuck: curve(s, [[0, 0.25], [0.2, 1], [0.65, 1], [0.92, 0]]),
+      flop: curve(s, [[0.65, 0], [0.92, 1], [1, 1]]),
+    };
+  }
+  const r = (u - b) / (1 - b);
+  return {
+    flip: curve(r, [[0, FLOP], [0.2, FLOP + 0.06], [0.55, -0.14], [0.78, 0.05], [1, 0]]),
+    lift: curve(r, [[0, -0.2], [0.2, -0.24], [0.55, 0.1], [0.78, -0.02], [1, 0]]),
+    squash: curve(r, [[0, 0.74], [0.18, 0.84], [0.5, 1.1], [0.72, 0.96], [1, 1]]),
+    tuck: 0,
+    flop: curve(r, [[0, 1], [0.3, 0.8], [0.6, 0]]),
+  };
+}
+
+const _flip = new THREE.Quaternion(), _pivot = new THREE.Vector3(), _axisX = new THREE.Vector3(1, 0, 0);
+
+/**
+ * Whole-body part of the belly jump on a posed rig (u: move progress, null = not jumping): pitches the
+ * hips (and so everything) about the body centre, lifts it on the hop and squashes / stretches it.
+ * Works in the hips' parent space (the rig root). Call every frame after posing: it also resets the scale.
+ */
+export function applyBellyJump(rig: ChonkRig, u: number | null) {
+  const hips = rig.hips;
+  if (u === null) {
+    hips.scale.set(1, 1, 1);
+    return;
+  }
+  const J = bellyJump(u), hb = rig.hipBase;
+  // squash toward the ground, then turn about the belly's centre and hop
+  hips.position.y *= J.squash;
+  _pivot.set(0, hb * 1.2, 0);
+  _flip.setFromAxisAngle(_axisX, J.flip);
+  hips.position.sub(_pivot).applyQuaternion(_flip).add(_pivot);
+  hips.position.y += J.lift * hb;
+  hips.quaternion.premultiply(_flip);
+  const w = 1 / Math.sqrt(J.squash);
+  hips.scale.set(w, J.squash, w);
+}
 
 export class Animator {
   private cur = zero();
@@ -157,6 +222,7 @@ export class Animator {
     }
 
     this.apply(P, dt, inp.move ? 26 : 14);
+    applyBellyJump(this.rig, inp.move === 'belly' && !inp.ko ? inp.moveT : null);
     this.rig.face?.update(dt, inp);
   }
 
@@ -201,16 +267,14 @@ export class Animator {
         break;
       }
       case 'belly': {
-        // the signature move: lean back, then BOING the belly forward with a hop
-        const back = curve(u, [[0, 0], [0.35, 1], [0.45, -0.2], [0.65, -0.35], [1, 0]]);
-        const hop = curve(u, [[0, 0], [0.38, 0], [0.48, 0.25], [0.6, 0.05], [1, 0]]);
-        P.bodyX = -0.55 * back; P.hipsX = -0.25 * back;
-        P.hipsY = hop;
-        P.squash = 1 + 0.12 * Math.max(0, -back) * 2 - 0.05 * Math.max(0, back);
-        P.shLX = 0.6 * back; P.shRX = 0.6 * back; P.shLZ = 0.9 + 0.4 * back; P.shRZ = -0.9 - 0.4 * back;
-        P.elL = -0.3; P.elR = -0.3;
-        P.legLX = -0.2 * back; P.legRX = -0.2 * back; P.knL = 0.4 * Math.max(0, back); P.knR = 0.4 * Math.max(0, back);
-        P.headX = 0.25 * back;
+        // the belly jump: curled up for the somersault, stretched out (arms forward, legs back) for the
+        // belly flop. The flip, hop and squash go on the whole body after the easing (applyBellyJump)
+        const J = bellyJump(u);
+        P.knL = P.knR = 1.6 * J.tuck;
+        P.legLX = P.legRX = 1.3 * J.tuck - 0.6 * J.flop;
+        P.shLX = P.shRX = -1.0 * J.tuck - 2.4 * J.flop; P.shLZ = 0.5; P.shRZ = -0.5;
+        P.elL = P.elR = -0.1 - 1.2 * J.tuck;
+        P.bodyX = 0.35 * J.tuck; P.headX = 0.3 * J.tuck - 0.4 * J.flop;
         P.tail = 1.3;
         P.brow = 1;
         break;

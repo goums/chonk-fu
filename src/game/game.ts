@@ -89,7 +89,7 @@ export class Game {
   /** the dialog on screen; `with` is the id of the NPC Le Chonk is talking to */
   dialog: { lines: Line[]; i: number; onEnd?: () => void; with?: string } | null = null;
   bellyCooldown = 0;
-  /** seconds for the belly bump to recharge (the Chi Charm from training makes it faster) */
+  /** seconds for the belly jump to recharge (the Chi Charm from training makes it faster) */
   bellyRecharge = 2.2;
   tiger: Enemy | null = null;
   ended = false;
@@ -174,7 +174,7 @@ export class Game {
       [-22, 22.5, 'barrel', 'dumpling'], [26, 37.5, 'vase', null], [-40, 37.5, 'vase', 'peach'], [40, 22.5, 'barrel', null], [-8, -6, 'vase', 'dumpling'], [8, -20, 'barrel', null],
     ];
     vv.forEach(([x, z, k, it], i) => add(new Breakable(`${k}-${i + 1}`, k, x, z, it, i, 10 + i)));
-    // Jade Stone 1: inside the cracked boulder in the bamboo forest (belly bump!)
+    // Jade Stone 1: inside the cracked boulder in the bamboo forest (belly jump!)
     add(new Breakable('boulder', 'boulder', SPOTS.boulder.x, SPOTS.boulder.z, 'jade', 0.3, 3));
     // Jade Stone 2: on the islet of the lotus pond
     add(new Pickup('jade-pond', 'jade', SPOTS.islet.x, SPOTS.islet.z));
@@ -346,7 +346,7 @@ export class Game {
   private stepInfo(): Tutorial {
     switch (this.trainStep) {
       case 'combo': return { keys: ['J', 'J', 'J'], text: 'Punch combo on a dummy', count: `${this.comboSeen.size}/3` };
-      case 'belly': return { keys: ['K'], text: 'Stand still and belly bump a dummy' };
+      case 'belly': return { keys: ['K'], text: 'Stand still and belly jump onto a dummy' };
       case 'slam': return { keys: ['Space', 'J'], sep: 'then', text: 'Jump, then punch in the air: Ground Slam a dummy' };
       case 'sprint': return { keys: ['Shift'], text: 'Hold Shift and run: sprint!', progress: Math.min(1, this.sprintT / SPRINT_GOAL) };
       case 'spar': return { keys: ['J', 'K'], sep: 'or', text: `Spar with ${PARTNER}: hit him ${SPAR_GOAL} times`, count: `${this.sparHits}/${SPAR_GOAL}` };
@@ -490,7 +490,7 @@ export class Game {
     if (id.startsWith('villager')) {
       const lines = [
         'Is that the Chonk? He is very round!',
-        'People say one belly bump can break a big rock.',
+        'People say one belly jump can break a big rock.',
         'The wolves live past the north bridge. Be careful!',
         'Papa Canard\'s Dragon Noodles make you very strong!',
         'I saw a green light on the pond island last night.',
@@ -529,20 +529,20 @@ export class Game {
         return this.say(
           [
             { who: T, text: 'Wow! You know all the moves now!' },
-            { who: T, text: 'Here is a Chi Charm. With it, your belly bump is ready faster.' },
+            { who: T, text: 'Here is a Chi Charm. With it, your belly jump is ready faster.' },
             { who: ME, text: 'Thank you, Tao! My belly is ready!' },
           ],
           () => {
             this.training = 'done';
             this.bellyRecharge = 1.3;
-            this.events.push({ type: 'toast', text: 'You got the Chi Charm! Your belly bump is ready faster', kind: 'quest' });
+            this.events.push({ type: 'toast', text: 'You got the Chi Charm! Your belly jump is ready faster', kind: 'quest' });
             this.events.push({ type: 'sound', id: 'jade' });
             this.refreshMarkers();
           },
         );
       const tips: Record<TrainStep, string> = {
         combo: 'Stand near a dummy and press J three times: punch, punch, kick!',
-        belly: 'Now the belly bump! Stand still and press K.',
+        belly: 'Now the belly jump! Stand still and press K.',
         slam: 'Press Space to jump. In the air, press J. BOOM!',
         sprint: 'Hold Shift while you run. Fast like the wind!',
         spar: `${PARTNER} wants to spar. Hit him ${SPAR_GOAL} times! Do not worry, he is friendly.`,
@@ -646,7 +646,7 @@ export class Game {
       ]);
     this.say([
       { who: O, text: 'Ha! I am OVERFIT! I learned every kung fu move in the world!' },
-      { who: O, text: 'Punch? I know it. Kick? I know it. Belly bump? I know it too! You cannot win, little cat!' },
+      { who: O, text: 'Punch? I know it. Kick? I know it. Belly jump? I know it too! You cannot win, little cat!' },
       { who: 'Le Chonk', text: 'We will see!' },
     ]);
   }
@@ -780,10 +780,10 @@ export class Game {
       const it = this.interactable();
       if (it) this.talk(it.id);
     }
-    // belly bump has a cooldown instead of a resource
+    // belly jump has a cooldown instead of a resource
     const want = { ...intent };
     if (want.belly) {
-      // (no cooldown spent on a bump that cannot start: stunned, swimming, mid-move or in the air)
+      // (no cooldown spent on a jump that cannot start: stunned, swimming, mid-move or in the air)
       if (this.bellyCooldown > 0 || this.player.move || !this.player.grounded || !this.player.canAct() || this.player.swimming) want.belly = false;
       else this.bellyCooldown = this.bellyRecharge;
     }
@@ -792,15 +792,22 @@ export class Game {
     this.player.step(dt, want, camYaw);
 
     const P = this.player;
-    // Dragon Chonk cannot be interrupted during his belly bump (it always lands)
+    // Dragon Chonk cannot be interrupted during his belly jump (it always lands)
     if (this.dragon && P.move === 'belly') P.invulnT = Math.max(P.invulnT, 0.05);
-    // Dragon Belly: a golden shockwave the moment the belly lands
-    if (this.dragon && P.move === 'belly' && P.strikeActive && this.lastBellyStrike !== P.strikeId) {
+    // the belly jump lands belly-first: dust, a thump and a shake (Dragon Belly: a golden shockwave)
+    if (P.move === 'belly' && P.strikeActive && this.lastBellyStrike !== P.strikeId) {
       this.lastBellyStrike = P.strikeId;
-      this.aura.dragonBelly(P.pos.x + Math.sin(P.heading) * 0.9, P.pos.z + Math.cos(P.heading) * 0.9);
-      this.shake = Math.max(this.shake, 0.55);
-      this.fx.text('DRAGON BELLY!', P.pos.x, P.pos.y + 2.9, P.pos.z, '#ffd23a', 1.1);
-      this.events.push({ type: 'sound', id: 'zap' });
+      // (puffs to both sides of the belly, not over it)
+      const sx = Math.cos(P.heading), sz = -Math.sin(P.heading), lx = P.pos.x - sz * 0.5, lz = P.pos.z + sx * 0.5;
+      for (const k of [-1, 1]) this.fx.dust(lx + sx * k * 1.1, P.pos.y, lz + sz * k * 1.1, 4, 0.6);
+      this.shake = Math.max(this.shake, 0.3);
+      this.events.push({ type: 'sound', id: 'slam' });
+      if (this.dragon) {
+        this.aura.dragonBelly(P.pos.x + Math.sin(P.heading) * 0.9, P.pos.z + Math.cos(P.heading) * 0.9);
+        this.shake = Math.max(this.shake, 0.55);
+        this.fx.text('DRAGON BELLY!', P.pos.x, P.pos.y + 2.9, P.pos.z, '#ffd23a', 1.1);
+        this.events.push({ type: 'sound', id: 'zap' });
+      }
     }
     if (this.aura.update(dt)) this.events.push({ type: 'sound', id: 'zap' });
 
@@ -866,7 +873,7 @@ export class Game {
         }
       }
       if (h.victim === this.tiger && h.attacker === P && !this.dragon) {
-        // before the noodles, Overfit predicts EVERY move, even the belly bump
+        // before the noodles, Overfit predicts EVERY move, even the belly jump
         const refund = h.damage - 1;
         h.victim.hp = Math.min(h.victim.maxHp, h.victim.hp + refund);
         h.damage = 1;
@@ -877,7 +884,7 @@ export class Game {
         this.predicted++;
         if (this.predicted === 1 || this.predicted % 5 === 0) this.events.push({ type: 'toast', text: 'Overfit: "Predicted! You need more power, little cat!"', kind: 'info' });
       } else if (h.attacker === P && this.dragon && h.move === 'belly' && h.victim instanceof Enemy) {
-        // the Dragon Belly: one bump beats Overfit, wolves fly away
+        // the Dragon Belly: one belly jump beats Overfit, wolves fly away
         const v = h.victim;
         v.hp = 0;
         v.ko = true;
