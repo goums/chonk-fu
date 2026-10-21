@@ -416,6 +416,22 @@ export class Game {
     this.scene.add(p.obj);
   }
 
+  /** who Le Chonk is talking to (for the dialog camera and to face them) */
+  dialogPartner(): { pos: THREE.Vector3; head: number } | null {
+    const d = this.dialog;
+    if (!d) return null;
+    const npc = d.with ? this.npcs.find((n) => n.id === d.with) : undefined;
+    if (npc) return { pos: npc.object.position, head: npc.height };
+    if (d.with === 'oracle') return { pos: new THREE.Vector3(this.oracle.x, this.oracle.group.position.y, this.oracle.z), head: 3.6 };
+    if (this.tiger) return { pos: this.tiger.pos, head: 2.4 };
+    return null;
+  }
+  /** is the current dialog line spoken by Le Chonk? */
+  chonkSpeaks() {
+    const line = this.dialog?.lines[this.dialog.i];
+    return !!line && line.who === 'Le Chonk';
+  }
+
   // ------------------------------------------------------------------ step
   step(dt: number, intent: Intent, camYaw: number) {
     // dialog: Enter / punch advances, the world waits
@@ -429,7 +445,9 @@ export class Game {
           end?.();
         }
       }
-      const still = { ...intent, moveX: 0, moveZ: 0, punch: false, kick: false, belly: false, jump: false, interact: false };
+      const partner = this.dialogPartner();
+      const face = partner ? Math.atan2(partner.pos.x - this.player.pos.x, partner.pos.z - this.player.pos.z) : null;
+      const still = { ...intent, moveX: 0, moveZ: 0, punch: false, kick: false, belly: false, jump: false, interact: false, face };
       this.player.step(dt, still, camYaw);
       const ctx = this.npcContext();
       for (const n of this.npcs) n.update(dt, ctx);

@@ -16,7 +16,88 @@ export class FollowCamera {
   constructor(public camera: THREE.PerspectiveCamera) {}
 
   private pull = 0;
+  /** dialog shot state: which side of the conversation line the camera stays on (180° rule) */
+  private shotSide = 0;
+  private inShot = false;
+  private shotPos = new THREE.Vector3();
+  private shotLook = new THREE.Vector3();
+  private shotKey = -1;
+  private shotPick = 0;
+
+  /**
+   * Conversation framing: shot / reverse shot over the listener's shoulder toward whoever speaks,
+   * both characters in frame, eased in and out. a = Le Chonk, b = the person he talks to.
+   */
+  dialogShot(dt: number, a: THREE.Vector3, aHead: number, b: THREE.Vector3, bHead: number, aSpeaks: boolean) {
+    const dx = b.x - a.x, dz = b.z - a.z;
+    const L = Math.max(0.8, Math.hypot(dx, dz));
+    const ux = dx / L, uz = dz / L; // a -> b
+    const nx = -uz, nz = ux; // perpendicular
+    const cam = this.camera.position;
+    if (!this.inShot) {
+      // keep the side the camera is already on, so the cut feels natural
+      this.shotSide = (cam.x - a.x) * nx + (cam.z - a.z) * nz >= 0 ? 1 : -1;
+      this.shotPos.copy(cam);
+      this.shotLook.copy(this.target);
+      this.shotKey = -1;
+      this.inShot = true;
+    }
+    const speaker = aSpeaks ? a : b, listener = aSpeaks ? b : a;
+    const sHead = aSpeaks ? aHead : bHead, lHead = aSpeaks ? bHead : aHead;
+    const sx = aSpeaks ? ux : -ux, sz = aSpeaks ? uz : -uz; // speaker -> listener
+    // look between the speaker's face and the midpoint, so both stay in frame
+    const look = new THREE.Vector3(
+      speaker.x * 0.7 + listener.x * 0.3,
+      speaker.y + sHead * 0.82,
+      speaker.z * 0.7 + listener.z * 0.3,
+    );
+    // candidate framings, best first: over the listener's shoulder (our side, then the other side),
+    // then a side-on two-shot (both sides), then a closer high shot; keep the first with a clear view
+    const eye = listener.y + Math.max(lHead, sHead * 0.8) * 0.95 + 0.25;
+    const back = 2.3 + L * 0.35, off = 1.5 + L * 0.3;
+    const mid = new THREE.Vector3((a.x + b.x) / 2, eye, (a.z + b.z) / 2);
+    const cands: THREE.Vector3[] = [];
+    for (const side of [this.shotSide, -this.shotSide])
+      cands.push(new THREE.Vector3(listener.x + sx * back + nx * side * off, eye, listener.z + sz * back + nz * side * off));
+    for (const side of [this.shotSide, -this.shotSide])
+      cands.push(new THREE.Vector3(mid.x + nx * side * (2.6 + L * 0.8), eye - 0.1, mid.z + nz * side * (2.6 + L * 0.8)));
+    cands.push(new THREE.Vector3(listener.x + sx * 1.4, eye + 1.2, listener.z + sz * 1.4));
+    const clear = (p: THREE.Vector3) => {
+      // the camera needs elbow room (nothing right in front of the lens), not just a clear line
+      if (pointBlocked(p.x, p.y, p.z, 1.3) || pointBlocked(p.x, p.y - 1.2, p.z, 1.3)) return false;
+      const d = p.clone().sub(look), n = Math.ceil(d.length() / 0.4);
+      for (let i = 1; i < n; i++) {
+        const q = look.clone().addScaledVector(d, i / n);
+        if (pointBlocked(q.x, q.y, q.z, i < n * 0.5 ? 0.6 : 0.3) || q.y < heightAt(q.x, q.z) + 0.2) return false;
+      }
+      return true;
+    };
+    // re-pick only when the speaker changes (or the current pick got blocked), so the shot holds still
+    const key = aSpeaks ? 1 : 0;
+    if (key !== this.shotKey || !clear(cands[this.shotPick] ?? cands[0])) {
+      this.shotKey = key;
+      this.shotPick = Math.max(0, cands.findIndex(clear));
+    }
+    const want = cands[this.shotPick] ?? cands[0];
+    const ground = heightAt(want.x, want.z) + 0.5;
+    if (want.y < ground) want.y = ground;
+    this.shotPos.x = damp(this.shotPos.x, want.x, 3.5, dt);
+    this.shotPos.y = damp(this.shotPos.y, want.y, 3.5, dt);
+    this.shotPos.z = damp(this.shotPos.z, want.z, 3.5, dt);
+    this.shotLook.x = damp(this.shotLook.x, look.x, 4.5, dt);
+    this.shotLook.y = damp(this.shotLook.y, look.y, 4.5, dt);
+    this.shotLook.z = damp(this.shotLook.z, look.z, 4.5, dt);
+    cam.copy(this.shotPos);
+    this.camera.lookAt(this.shotLook);
+    // leave the orbit camera where the shot ends, so returning to play does not snap
+    this.target.copy(a).setY(a.y + 1.5);
+    const rel = cam.clone().sub(this.target);
+    this.yaw = Math.atan2(rel.x, rel.z);
+    this.reach = Math.min(this.dist, rel.length());
+  }
+
   update(dt: number, focus: THREE.Vector3, heading: number, moving: boolean, look: { dx: number; dy: number; wheel: number; held?: boolean }, vel?: THREE.Vector3) {
+    this.inShot = false;
     // a drag in progress (even a still one) keeps the camera where the player put it
     if (look.dx || look.dy || look.held) this.idle = 0;
     else this.idle += dt;

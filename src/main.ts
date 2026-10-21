@@ -119,7 +119,9 @@ function frame(now: number) {
   }
   const P = game.player;
   const moving = Math.hypot(P.vel.x, P.vel.z) > 1 && !game.dialog;
-  follow.update(real, P.pos, P.heading, moving, input.look, P.vel);
+  const partner = game.dialogPartner();
+  if (partner) follow.dialogShot(real, P.pos, 1.6, partner.pos, partner.head, game.chonkSpeaks());
+  else follow.update(real, P.pos, P.heading, moving, input.look, P.vel);
   if (game.shake > 0) {
     const s = game.shake * 0.25;
     camera.position.x += (Math.random() - 0.5) * s;
