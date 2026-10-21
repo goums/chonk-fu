@@ -338,6 +338,7 @@ kbd.wide { padding: 0 0.65em; letter-spacing: 0.04em; }
 .hud-btn .seal { width: 17px; height: 17px; font-size: 13px; letter-spacing: 0; }
 .hud-btn.icon { padding: 6px 8px; }
 .agent-btn { align-self: flex-start; margin-top: 4px; pointer-events: auto; }
+.mistral-m { flex: none; filter: drop-shadow(0 0 4px rgba(255, 130, 5, 0.45)); }
 .hud-btn.on { color: var(--jade-hi); border-color: var(--jade); animation: btnGlow 1.6s ease-in-out infinite; }
 .hud-btn.on:hover { background: var(--jade); color: #06140e; }
 @keyframes btnGlow { 50% { box-shadow: 0 0 16px rgba(79, 211, 154, 0.55); } }
