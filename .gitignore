@@ -1,0 +1,14 @@
+node_modules
+dist
+.env*
+runs/
+*.log
+.DS_Store
+bench/tmp/
+node_modules/.evalite
+evals/results/latest.*
+video/node_modules
+video/out
+video/public/footage
+video/samples
+video/*.log

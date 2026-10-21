@@ -1,0 +1,5 @@
+:root { --ink: #2b1d17; --paper: #fdf3dc; --gold: #f2c23a; --red: #d9362b; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #e9dcc0; font-family: 'Fredoka', system-ui, sans-serif; color: var(--ink); }
+#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; }
+#hud { position: fixed; inset: 0; pointer-events: none; }
