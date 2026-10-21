@@ -1,7 +1,7 @@
 // Friendly characters: they idle, turn to face Le Chonk when he comes close, and show a marker
 // ("!" new quest, "?" waiting for you) above their head.
 import * as THREE from 'three';
-import { Animator } from '../chonk/animator';
+import { makeAnimator, type CharacterAnimator } from '../chonk/motion';
 import { buildCharacter, type CharacterKind } from '../chonk/characters';
 import type { ChonkRig } from '../chonk/model';
 import { angleDelta, dampAngle } from '../core/math';
@@ -32,7 +32,7 @@ const MARKERS = { '!': markerTexture('!', '#ffd23a'), '?': markerTexture('?', '#
 
 export class NPC {
   rig: ChonkRig;
-  anim: Animator;
+  anim: CharacterAnimator;
   heading: number;
   t = 0;
   marker: THREE.Sprite;
@@ -40,7 +40,7 @@ export class NPC {
   talkRadius = 3.2;
   constructor(public id: string, public name: string, kind: CharacterKind, public x: number, public z: number, heading: number, public height: number) {
     this.rig = buildCharacter(kind);
-    this.anim = new Animator(this.rig);
+    this.anim = makeAnimator(this.rig);
     this.heading = heading;
     this.rig.root.position.set(x, groundAt(x, z), z);
     this.rig.root.rotation.y = heading;
@@ -70,7 +70,7 @@ export class NPC {
       {
         t: this.t + this.x, speed: 0, grounded: true, vy: 0,
         // a little "talking" bob: reuse the jab with a tiny amplitude would look odd, so just breathe
-        move: null, moveT: 0, hurtT: talking ? 0.5 : Infinity, ko: false, angry: false,
+        move: null, moveT: 0, hurtT: Infinity, ko: false, angry: false, talking: talking && d < 6,
       },
       dt,
     );

@@ -1,7 +1,8 @@
 // A kung-fu fighter: kinematic body on the heightfield, a move set with strike windows, hit reactions.
 // Le Chonk (Player), the bandits and the boss (Enemy) all extend this.
 import * as THREE from 'three';
-import { Animator, MOVES, type MoveName } from '../chonk/animator';
+import { MOVES, type MoveName } from '../chonk/animator';
+import { makeAnimator, type CharacterAnimator } from '../chonk/motion';
 import type { ChonkRig } from '../chonk/model';
 import { angleDelta, clamp, damp } from '../core/math';
 import { WATER_LEVEL } from '../world/layout';
@@ -13,7 +14,7 @@ let nextId = 1;
 
 export class Fighter {
   id = nextId++;
-  anim: Animator;
+  anim: CharacterAnimator;
   pos = new THREE.Vector3();
   vel = new THREE.Vector3();
   heading = 0; // radians, 0 = facing +z
@@ -34,6 +35,8 @@ export class Fighter {
   koT = 0;
   t = 0;
   angry = false;
+  /** in a fight stance (enemies set this while engaging) */
+  fighting = false;
   /** damage and knockback multipliers (the boss hits harder) */
   power = 1;
   radius: number;
@@ -42,7 +45,7 @@ export class Fighter {
   protected slamPending = false;
 
   constructor(public rig: ChonkRig, x: number, z: number, public maxHp: number, radius = 0.6, height = 1.6) {
-    this.anim = new Animator(rig);
+    this.anim = makeAnimator(rig);
     this.hp = maxHp;
     this.radius = radius;
     this.height = height;
@@ -58,7 +61,7 @@ export class Fighter {
     const parent = this.rig.root.parent;
     parent?.remove(this.rig.root);
     this.rig = rig;
-    this.anim = new Animator(rig);
+    this.anim = makeAnimator(rig);
     parent?.add(rig.root);
   }
   get alive() {
@@ -202,6 +205,7 @@ export class Fighter {
         hurtT: this.hurtT,
         ko: this.ko,
         angry: this.angry,
+        fighting: this.fighting,
       },
       dt,
     );

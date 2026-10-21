@@ -139,6 +139,7 @@ export class Enemy extends Fighter {
         break;
       }
     }
+    this.fighting = this.state === 'fight' || this.state === 'chase';
     const done = this.tickMove(dt);
     if (done && this.combo.length && this.canAct()) this.startMove(this.combo.shift()!);
     this.physics(dt, wx, wz, speed, face, jump);

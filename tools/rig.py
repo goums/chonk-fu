@@ -225,17 +225,14 @@ am.object = arm
 body.parent = arm
 unweighted = sum(1 for v in body.data.vertices if not v.groups)
 print("SKIN groups", [g.name for g in body.vertex_groups], "unweighted_verts", unweighted)
-if unweighted > 0.2 * len(body.data.vertices):
-    # bone heat failed (non-manifold mesh): fall back to envelope-like distance weights
-    print("FALLBACK distance weights")
-    for g in list(body.vertex_groups):
-        body.vertex_groups.remove(g)
-    groups = {n: body.vertex_groups.new(name=n) for n in J if n != "tail0"}
-    def seg_dist(p, a, b):
-        ab = b - a
-        t = max(0, min(1, (p - a).dot(ab) / ab.length_squared))
-        return (a + ab * t - p).length
-    for v in body.data.vertices:
+def seg_dist(p, a, b):
+    ab = b - a
+    t = max(0, min(1, (p - a).dot(ab) / ab.length_squared))
+    return (a + ab * t - p).length
+
+def distance_weights(verts, groups):
+    """envelope-like weights from the distance to each bone segment (top 4, soft falloff)"""
+    for v in verts:
         ds = {n: seg_dist(v.co, J[n], TAILS[n]) for n in groups}
         dmin = min(ds.values())
         ws = {n: math.exp(-(d - dmin) / (0.03 * H)) for n, d in ds.items()}
@@ -243,6 +240,20 @@ if unweighted > 0.2 * len(body.data.vertices):
         tot = sum(w for _, w in top)
         for n, w in top:
             groups[n].add([v.index], w / tot, "REPLACE")
+
+if unweighted > 0.2 * len(body.data.vertices):
+    # bone heat failed (non-manifold mesh): fall back to distance weights everywhere
+    print("FALLBACK distance weights")
+    for g in list(body.vertex_groups):
+        body.vertex_groups.remove(g)
+    groups = {n: body.vertex_groups.new(name=n) for n in J if n != "tail0"}
+    distance_weights(body.data.vertices, groups)
+elif unweighted:
+    # a few stray vertices (eyes, whiskers...) missed the heat solve: give them distance weights,
+    # otherwise the game pins them to the hips and they lag behind the head
+    groups = {g.name: g for g in body.vertex_groups if g.name != "tail0"}
+    distance_weights([v for v in body.data.vertices if not v.groups], groups)
+    print("FILLED", unweighted, "stray vertices")
 
 # ---- 5. export ----
 bpy.ops.object.select_all(action="DESELECT")

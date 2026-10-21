@@ -4,8 +4,8 @@ import { createPost } from './core/post';
 import { FollowCamera } from './game/camera';
 import { Game } from './game/game';
 import { buildCharacter, type CharacterKind } from './chonk/characters';
-import { Animator } from './chonk/animator';
 import { preloadModels, rigFromModel } from './chonk/gltfRig';
+import { initMotionLibrary, makeAnimator } from './chonk/motion';
 import { groundAt } from './world/world';
 import { Hud } from './ui/hud';
 import { buildSky } from './world/sky';
@@ -33,6 +33,7 @@ const { sun, water, grass } = buildWorld(scene);
 
 const COMPARE = new URLSearchParams(location.search).has('compare');
 await preloadModels(['chonk', 'tiger', 'wolf', 'tortoise', 'duck', 'pig', 'bunny', ...(COMPARE ? ['chonk-tripo', 'chonk-meshy', 'chonk-open', 'chonk-hunyuan'] : [])]);
+await initMotionLibrary();
 const game = new Game(scene);
 const hud = new Hud(document.getElementById('hud')!, game);
 const lineup: (() => void)[] = [];
@@ -46,7 +47,7 @@ if (COMPARE) {
     const x = game.player.pos.x + (i - 1.5) * 2.4, z = game.player.pos.z - 3;
     rig.root.position.set(x, groundAt(x, z), z);
     scene.add(rig.root);
-    const a = new Animator(rig);
+    const a = makeAnimator(rig);
     lineup.push(() => a.update({ t: performance.now() / 1000, speed: 0, grounded: true, vy: 0, move: null, moveT: 0, hurtT: Infinity, ko: false, angry: false }, 1 / 60));
     const cv = document.createElement('canvas');
     cv.width = 256; cv.height = 64;
@@ -73,7 +74,7 @@ if (new URLSearchParams(location.search).has('lineup')) {
     const x = game.player.pos.x + (i < 3 ? -1 : 1) * (1.8 + (i % 3) * 1.6), z = game.player.pos.z;
     rig.root.position.set(x, game.player.pos.y, z);
     scene.add(rig.root);
-    const a = new Animator(rig);
+    const a = makeAnimator(rig);
     lineup.push(() => a.update({ t: performance.now() / 1000, speed: 0, grounded: true, vy: 0, move: null, moveT: 0, hurtT: Infinity, ko: false, angry: false }, 1 / 60));
   });
 }

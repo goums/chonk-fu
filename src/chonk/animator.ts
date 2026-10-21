@@ -16,6 +16,10 @@ export interface AnimInput {
   hurtT: number; // seconds since last hit (Infinity if none)
   ko: boolean;
   angry: boolean;
+  /** NPC is in a conversation (talking idle) */
+  talking?: boolean;
+  /** in a fight stance (guard idle) */
+  fighting?: boolean;
 }
 
 /** joint angles (radians) */

@@ -7,7 +7,7 @@ import { Fighter } from './fighter';
 
 /** ground speeds (m/s): a chubby cat jogs, he doesn't sprint like a car */
 export const RUN_SPEED = 5;
-export const WALK_SPEED = 1.8;
+export const WALK_SPEED = 1.2;
 
 export class Player extends Fighter {
   /** queued follow-up in the jab -> cross -> kick combo */
