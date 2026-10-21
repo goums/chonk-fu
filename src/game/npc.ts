@@ -123,11 +123,11 @@ function makeMarker() {
   MARKERS ??= { '!': markerTexture('!'), '?': markerTexture('?') };
   HALO ??= haloTexture();
   const group = new THREE.Group();
-  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: HALO, color: MARKER_GLOW['!'], transparent: true, depthTest: false, depthWrite: false, fog: false, blending: THREE.AdditiveBlending, opacity: 0.7 }));
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: HALO, color: MARKER_GLOW['!'], transparent: true, depthTest: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending, opacity: 0.7 }));
   halo.scale.setScalar(1.9);
   halo.renderOrder = 5;
   const icon = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: MARKERS['!'], transparent: true, depthTest: false, depthWrite: false, fog: false,
+    map: MARKERS['!'], transparent: true, depthTest: true, depthWrite: false, fog: false,
     // the texture is premultiplied: blend ONE / ONE_MINUS_SRC_ALPHA
     blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
     blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
