@@ -89,6 +89,8 @@ function rawHeight(x: number, z: number): number {
   {
     const d = Math.hypot(x - POND.x, z - POND.z);
     h = lerp(h, Math.min(h, WATER_LEVEL - 1.8), smoothstep(POND.r + 6, POND.r - 4, d));
+    // a little islet in the middle of the pond
+    h = Math.max(h, lerp(WATER_LEVEL - 1.8, WATER_LEVEL + 0.7, smoothstep(5.5, 2.5, d)));
   }
 
   // paths are slightly sunk and smoothed

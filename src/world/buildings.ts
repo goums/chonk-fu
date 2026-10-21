@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { rng } from '../core/math';
 import { addBox, addCircle } from '../game/colliders';
 import { Batch, addRidge, box, cyl, kitMaterial, roofGeometry } from './kit';
-import { ARENA, BRIDGES, GROUND, PALACE_MOUNT, PEACH_HILL, POND, RIVER_HALF_WIDTH, STAIRS, VILLAGE, riverX } from './layout';
+import { ARENA, BRIDGES, FRUIT_TREES, GROUND, MUSHROOM_ROCKS, PALACE_MOUNT, PEACH_HILL, POND, RIVER_HALF_WIDTH, SHOOTS, SPOTS, STAIRS, VILLAGE, riverX } from './layout';
 import { heightAt, stairHeight } from './terrain';
 
 const C = {
@@ -387,5 +387,7 @@ export function reserved(x: number, z: number) {
   for (const br of BRIDGES) if (Math.abs(x - br.x) < BRIDGE.len / 2 + 3 && Math.abs(z - br.z) < 5) return true;
   if (Math.abs(x - VILLAGE.x) < 60 && Math.abs(z - VILLAGE.z) < 6) return true;
   if (Math.abs(x - riverX(z)) < 2) return true;
+  for (const p of Object.values(SPOTS)) if (Math.hypot(x - p.x, z - p.z) < 6) return true;
+  for (const [px, pz] of [...FRUIT_TREES, ...SHOOTS, ...MUSHROOM_ROCKS]) if (Math.hypot(x - px, z - pz) < 3.5) return true;
   return false;
 }

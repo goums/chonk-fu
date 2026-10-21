@@ -1,11 +1,10 @@
 import * as THREE from 'three';
-import { Input } from './core/input';
+import { Input, emptyIntent, type Intent } from './core/input';
 import { createPost } from './core/post';
 import { FollowCamera } from './game/camera';
-import { Player } from './game/player';
-import { buildCharacter, type CharacterKind } from './chonk/characters';
-import { Animator } from './chonk/animator';
-import { VILLAGE } from './world/layout';
+import { Game } from './game/game';
+import { preloadModels } from './chonk/gltfRig';
+import { Hud } from './ui/hud';
 import { buildSky } from './world/sky';
 import { buildWorld } from './world/world';
 
@@ -29,23 +28,13 @@ const { sun, water, grass } = buildWorld(scene);
   scene.environmentIntensity = 0.6;
 }
 
-const player = new Player(VILLAGE.x, VILLAGE.z);
-scene.add(player.object);
-
-// ?lineup: show the whole cast next to Le Chonk (art check)
-const lineup: Animator[] = [];
-if (new URLSearchParams(location.search).has('lineup')) {
-  (['tiger', 'wolf', 'tortoise', 'duck', 'pig', 'bunny'] as CharacterKind[]).forEach((k, i) => {
-    const rig = buildCharacter(k);
-    const x = VILLAGE.x + (i < 3 ? -1 : 1) * (1.6 + (i % 3) * 1.5), z = VILLAGE.z;
-    rig.root.position.set(x, player.pos.y, z);
-    scene.add(rig.root);
-    lineup.push(new Animator(rig));
-  });
-}
+await preloadModels(['chonk', 'tiger', 'wolf', 'tortoise', 'duck', 'pig', 'bunny']);
+const game = new Game(scene);
+const hud = new Hud(document.getElementById('hud')!, game);
 const post = new URLSearchParams(location.search).has('nopost') ? null : createPost(renderer, scene, camera);
 const input = new Input(canvas);
 const follow = new FollowCamera(camera);
+follow.yaw = 0;
 
 function resize() {
   renderer.setSize(innerWidth, innerHeight, false);
@@ -56,30 +45,48 @@ function resize() {
 addEventListener('resize', resize);
 resize();
 
+/** external control (tests, AI harness): when active, the sim only advances through tick() */
+const external = { active: false };
+function tick(n: number, intent: Partial<Intent> = {}) {
+  for (let i = 0; i < n; i++) {
+    game.step(DT, { ...emptyIntent(), ...(i === 0 ? intent : { ...intent, jump: false, punch: false, kick: false, belly: false, interact: false }) }, follow.yaw);
+    time += DT;
+  }
+  follow.update(DT * n, game.player.pos, game.player.heading, false, input.look);
+}
+const SUN_DIR = new THREE.Vector3(0.45, 0.62, 0.35).normalize();
 const DT = 1 / 60;
 let acc = 0, last = performance.now(), time = 0;
 function frame(now: number) {
-  acc = Math.min(acc + (now - last) / 1000, 0.25);
+  const real = Math.min((now - last) / 1000, 0.25);
+  acc += real;
   last = now;
-  while (acc >= DT) {
+  while (acc >= DT && !external.active) {
     const intent = input.intent();
     input.endFrame();
-    player.step(DT, intent, follow.yaw);
-    for (const a of lineup) a.update({ t: time, speed: 0, grounded: true, vy: 0, move: null, moveT: 0, hurtT: Infinity, ko: false, angry: false }, DT);
+    game.step(DT, intent, follow.yaw);
     time += DT;
     acc -= DT;
   }
-  const moving = Math.hypot(player.vel.x, player.vel.z) > 1;
-  follow.update(1 / 60, player.pos, player.heading, moving, input.look);
-  sun.position.copy(player.pos).add(new THREE.Vector3(0.45, 0.62, 0.35).normalize().multiplyScalar(120));
-  sun.target.position.copy(player.pos);
+  const P = game.player;
+  const moving = Math.hypot(P.vel.x, P.vel.z) > 1 && !game.dialog;
+  follow.update(real, P.pos, P.heading, moving, input.look);
+  if (game.shake > 0) {
+    const s = game.shake * 0.25;
+    camera.position.x += (Math.random() - 0.5) * s;
+    camera.position.y += (Math.random() - 0.5) * s;
+  }
+  sun.position.copy(P.pos).addScaledVector(SUN_DIR, 120);
+  sun.target.position.copy(P.pos);
   water.update(time);
   grass.update(time);
+  hud.update(real, follow.yaw);
+  game.events.length = 0;
   if (post) post.render();
   else renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
-// debug handle for the harness and for development
-Object.assign(window, { chonk: { player, follow, scene, camera, renderer, THREE, post } });
+// debug handle for development and the agent harness
+Object.assign(window, { chonk: { game, player: game.player, follow, scene, camera, renderer, THREE, post, tick, external } });

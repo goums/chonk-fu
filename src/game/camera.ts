@@ -48,7 +48,7 @@ export class FollowCamera {
     let reach = full;
     for (let d = 1; d < full; d += 0.5) {
       const px = this.target.x + dir.x * d, py = this.target.y + dir.y * d, pz = this.target.z + dir.z * d;
-      if (pointBlocked(px, py, pz) || py < heightAt(px, pz) + 0.3) {
+      if (pointBlocked(px, py, pz, 1.4) || py < heightAt(px, pz) + 0.3) {
         reach = Math.max(1.2, d - 0.6);
         break;
       }

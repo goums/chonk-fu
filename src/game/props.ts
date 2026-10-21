@@ -1,67 +1,9 @@
-// Gameplay props: floating GPUs (the quest items), dumplings and peaches (healing), the Oracle shrine,
-// and the wolf bandit camps.
+// Gameplay props: the Oracle shrine (an AI that runs on five Jade Stones) and the wolf bandit camps.
 import * as THREE from 'three';
-import { toon } from '../chonk/toon';
 import { rng } from '../core/math';
 import { Batch, box, cyl, kitMaterial, roofGeometry } from '../world/kit';
 import { groundAt } from '../world/world';
 import { addCircle } from './colliders';
-
-/** a graphics card: green PCB, black shroud, two fans, gold edge connector, glowing LED strip */
-export function gpuModel() {
-  const g = new THREE.Group();
-  const b = new Batch();
-  b.add(box(1.1, 0.06, 0.5), 0x1f6b3a, 0, 0, 0);
-  b.add(box(1.0, 0.18, 0.46), 0x2a2a30, 0, 0.12, 0);
-  b.add(box(0.5, 0.04, 0.06), 0xe8b83a, 0.15, -0.03, 0.27);
-  for (const x of [-0.25, 0.25]) {
-    b.add(cyl(0.19, 0.19, 0.05, 16), 0x55555e, x, 0.22, 0);
-    for (let k = 0; k < 5; k++) b.add(box(0.03, 0.02, 0.17), 0x8a8a96, x, 0.25, 0, (k / 5) * Math.PI);
-    b.add(cyl(0.05, 0.05, 0.06, 8), 0xe8b83a, x, 0.25, 0);
-  }
-  const body = b.mesh(kitMaterial());
-  body.castShadow = true;
-  g.add(body);
-  const led = new THREE.Mesh(box(0.95, 0.03, 0.03), new THREE.MeshBasicMaterial({ color: 0x5dff8a }));
-  led.position.set(0, 0.16, 0.24);
-  g.add(led);
-  return g;
-}
-
-/** a vertical beam of light so items can be spotted from afar */
-export function beam(color: number, h = 18) {
-  const m = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.35, 0.6, h, 12, 1, true),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide, fog: false }),
-  );
-  m.position.y = h / 2;
-  return m;
-}
-
-export function dumplingModel() {
-  const g = new THREE.Group();
-  const bun = new THREE.Mesh(new THREE.SphereGeometry(0.28, 14, 10), toon(0xfff6e6));
-  bun.scale.set(1, 0.75, 1);
-  const top = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.14, 8), toon(0xfff6e6));
-  top.position.y = 0.22;
-  g.add(bun, top);
-  // little steam basket
-  const basket = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.38, 0.16, 14), toon(0xc9a36a));
-  basket.position.y = -0.2;
-  g.add(basket);
-  g.traverse((o) => (o.castShadow = true));
-  return g;
-}
-
-export function peachModel() {
-  const g = new THREE.Group();
-  const p = new THREE.Mesh(new THREE.SphereGeometry(0.25, 14, 10), toon(0xffa0a8));
-  const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.2, 4), toon(0x5c9a3e));
-  leaf.position.set(0.06, 0.25, 0);
-  leaf.rotation.z = -0.8;
-  g.add(p, leaf);
-  return g;
-}
 
 /** the Oracle: a jade monolith with a screen face and five GPU slots */
 export class Oracle {
@@ -95,9 +37,10 @@ export class Oracle {
       const s = new THREE.Group();
       s.position.set(-1.2 + i * 0.6, 1.25, 0.75);
       s.scale.setScalar(0.45);
-      s.rotation.y = Math.PI / 2;
       s.visible = false;
-      s.add(gpuModel());
+      const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.4, 0), new THREE.MeshPhysicalMaterial({ color: 0x3fd88a, roughness: 0.1, emissive: 0x0d6b3a, emissiveIntensity: 1.5, flatShading: true }));
+      gem.scale.set(1, 1.5, 1);
+      s.add(gem);
       this.slots.push(s);
       this.group.add(s);
     }

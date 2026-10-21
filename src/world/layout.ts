@@ -46,3 +46,27 @@ export const PILLARS: [number, number, number, number][] = [
   [130, 240, 32, 95], [20, 250, 30, 85], [-100, 240, 32, 100], [-170, -95, 16, 55],
   [-160, 120, 18, 50], [150, 150, 14, 45], [-30, -230, 18, 60],
 ];
+
+/** gameplay spots: NPCs, hidden Jade Stones, ingredient patches (kept clear of trees) */
+export const SPOTS = {
+  canard: { x: -2, z: 14.2 },
+  crates: { x: 6.8, z: 11 },
+  tortue: { x: PEACH_HILL.x + 4.5, z: PEACH_HILL.z + 3.5 },
+  boulder: { x: 168, z: 34 },
+  islet: { x: POND.x, z: POND.z },
+  oldTree: { x: -156, z: -22 },
+  camp: { x: 132, z: -112 },
+  oracle: { x: 0, z: -150 },
+  palace: { x: 0, z: -160 },
+  arenaGate: { x: ARENA.x, z: ARENA.z - ARENA.r },
+};
+/** peach trees on the hill that drop a peach when shaken */
+export const FRUIT_TREES: [number, number][] = [
+  [-108, 30], [-140, 32], [-150, 0], [-104, -8], [-130, -16], [-96, 14],
+];
+/** bamboo shoots on the forest floor */
+export const SHOOTS: [number, number][] = [[120, 52], [138, 66], [178, 8], [186, -40], [150, -62], [112, -30]];
+/** mossy rocks around the pond; some hide mushrooms */
+export const MUSHROOM_ROCKS: [number, number, boolean][] = [
+  [-46, 98, true], [-52, 124, false], [-74, 130, true], [-96, 118, false], [-92, 86, true], [-58, 80, false],
+];

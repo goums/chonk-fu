@@ -11,19 +11,31 @@ export const allColliders: Collider[] = [];
 
 function insert(c: Collider, r: number) {
   allColliders.push(c);
+  cellsOf.set(c, []);
   for (let i = Math.floor((c.x - r) / CELL); i <= Math.floor((c.x + r) / CELL); i++)
     for (let j = Math.floor((c.z - r) / CELL); j <= Math.floor((c.z + r) / CELL); j++) {
       const k = key(i, j);
       let l = grid.get(k);
       if (!l) grid.set(k, (l = []));
       l.push(c);
+      cellsOf.get(c)!.push(k);
     }
+  return c;
+}
+const cellsOf = new Map<Collider, number[]>();
+export function removeCollider(c: Collider) {
+  for (const k of cellsOf.get(c) ?? []) {
+    const l = grid.get(k);
+    if (l) l.splice(l.indexOf(c), 1);
+  }
+  cellsOf.delete(c);
+  allColliders.splice(allColliders.indexOf(c), 1);
 }
 export function addCircle(x: number, z: number, r: number, y0 = -100, y1 = 1000) {
-  insert({ kind: 'circle', x, z, r, y0, y1 }, r);
+  return insert({ kind: 'circle', x, z, r, y0, y1 }, r);
 }
 export function addBox(x: number, z: number, hx: number, hz: number, rot = 0, y0 = -100, y1 = 1000) {
-  insert({ kind: 'box', x, z, hx, hz, rot, y0, y1 }, Math.hypot(hx, hz));
+  return insert({ kind: 'box', x, z, hx, hz, rot, y0, y1 }, Math.hypot(hx, hz));
 }
 
 /** push a cylinder (x, z, radius r, feet at y, height h) out of the obstacles; returns the corrected position */

@@ -12,3 +12,7 @@ video/out
 video/public/footage
 video/samples
 video/*.log
+
+# raw image-to-3D outputs (regenerate with tools/to3d.py; rigged results live in public/models)
+art/models/
+__pycache__/

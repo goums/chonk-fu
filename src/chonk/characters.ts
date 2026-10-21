@@ -2,6 +2,7 @@
 // Papa Canard the noodle chef, and the pig and bunny villagers.
 import * as THREE from 'three';
 import { buildCreature, type CreatureDef } from './creature';
+import { rigFromModel } from './gltfRig';
 import type { ChonkRig } from './model';
 import { FUR } from './model';
 
@@ -289,5 +290,10 @@ export type CharacterKind = 'chonk' | 'tiger' | 'wolf' | 'tortoise' | 'duck' | '
 const DEFS: Record<CharacterKind, CreatureDef> = { chonk: CHONK, tiger: TIGER, wolf: WOLF, tortoise: TORTOISE, duck: DUCK, pig: PIG, bunny: BUNNY };
 
 export function buildCharacter(kind: CharacterKind): ChonkRig {
+  // detailed pipeline models first (public/models/<kind>.glb), the code sculpt as a fallback
+  if (!new URLSearchParams(location.search).has('sculpt')) {
+    const rig = rigFromModel(kind);
+    if (rig) return rig;
+  }
   return buildCreature(DEFS[kind]);
 }
