@@ -1,6 +1,7 @@
 // Procedural animation for Le Chonk's rig: every frame we compute a target pose from the movement state
 // and the current move (punch, kick, belly bump...), then ease each joint toward it. Cheap, smooth, and
 // deterministic (driven by sim time only).
+import type { Vector3 } from 'three';
 import { clamp, damp } from '../core/math';
 import type { ChonkRig } from './model';
 
@@ -20,6 +21,15 @@ export interface AnimInput {
   talking?: boolean;
   /** in a fight stance (guard idle) */
   fighting?: boolean;
+  /** world-space point the head (and a bit of the chest) should turn toward; null/undefined = straight ahead */
+  lookAt?: Vector3 | null;
+  /** expressive gesture: npc.ts holds the value for the gesture's duration (rising edge = start the clip,
+   *  null in between); 'talk' stays set while the NPC's dialog line is being spoken */
+  gesture?: 'wave' | 'nod' | 'yes' | 'talk' | 'cheer' | 'angry' | null;
+  /** turning speed (rad/s, + = left); turning on the spot takes little steps (motion.ts) */
+  turn?: number;
+  /** floating in deep water (fighter.ts): swim pose instead of locomotion */
+  swimming?: boolean;
 }
 
 /** joint angles (radians) */
@@ -67,6 +77,7 @@ export const MOVES: Record<MoveName, { duration: number; hit: [number, number]; 
 export class Animator {
   private cur = zero();
   private phase = 0;
+  private swimPh = 0;
 
   private browY: number;
   constructor(private rig: ChonkRig) {
@@ -90,7 +101,7 @@ export class Animator {
     P.headX = Math.sin(inp.t * 1.1) * 0.03;
     P.brow = inp.angry ? 1 : 0;
 
-    if (inp.grounded && inp.speed > 0.2) {
+    if (inp.grounded && inp.speed > 0.2 && !inp.swimming) {
       // waddle: big belly bounce, swinging arms, short fast steps
       const s = Math.sin(ph), c = Math.cos(ph);
       const amp = 0.45 + run * 0.4;
@@ -109,7 +120,18 @@ export class Animator {
       P.tailSide = s * 0.4;
     }
 
-    if (!inp.grounded) {
+    if (inp.swimming && !inp.ko) {
+      // dog paddle: belly down, head up, alternating paws, flutter kicks, tail trailing
+      this.swimPh += dt * Math.PI * 2 * (0.8 + inp.speed * 0.35);
+      const s = Math.sin(this.swimPh);
+      P.hipsX = 1.1; P.bodyX = -0.25; P.headX = -0.75 + Math.sin(this.swimPh * 2) * 0.04;
+      P.hipsRoll = s * 0.06;
+      P.shLX = -0.85 - 0.6 * s; P.shRX = -0.85 + 0.6 * s; P.shLZ = 0.35; P.shRZ = -0.35;
+      P.elL = -0.6 - 0.3 * Math.max(0, s); P.elR = -0.6 - 0.3 * Math.max(0, -s);
+      const k = Math.sin(this.swimPh * 2) * 0.35;
+      P.legLX = -0.25 + k; P.legRX = -0.25 - k; P.knL = 0.2; P.knR = 0.2;
+      P.tail = -2.4; P.tailSide = s * 0.8;
+    } else if (!inp.grounded) {
       // jump / fall: tuck the legs, arms up and out
       const rising = inp.vy > 0;
       P.legLX = rising ? 0.7 : 0.3; P.legRX = rising ? 0.2 : 0.3;

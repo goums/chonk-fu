@@ -1,6 +1,7 @@
 // Comic-book hit effects: starburst flashes, onomatopoeia ("POW!", "BOING!"), damage numbers, dust puffs,
 // and sparkles for pickups. All sprites from canvas textures, pooled.
 import * as THREE from 'three';
+import { excludeFromAO } from './highlight';
 
 interface Fx { obj: THREE.Sprite; t: number; life: number; vy: number; grow: number; fade: boolean }
 
@@ -88,7 +89,7 @@ export class Effects {
 
   private spawn(map: THREE.Texture, x: number, y: number, z: number, w: number, h: number, life: number, vy = 0, grow = 0, fade = true) {
     const m = new THREE.SpriteMaterial({ map, transparent: true, depthWrite: false, depthTest: false, fog: false });
-    const s = new THREE.Sprite(m);
+    const s = excludeFromAO(new THREE.Sprite(m));
     s.position.set(x, y, z);
     s.scale.set(w, h, 1);
     s.renderOrder = 10;

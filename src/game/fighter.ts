@@ -1,4 +1,5 @@
-// A kung-fu fighter: kinematic body on the heightfield, a move set with strike windows, hit reactions.
+// A kung-fu fighter: kinematic body on the heightfield, a move set with strike windows, hit reactions,
+// swimming in deep water (river / pond).
 // Le Chonk (Player), the bandits and the boss (Enemy) all extend this.
 import * as THREE from 'three';
 import { MOVES, type MoveName } from '../chonk/animator';
@@ -43,6 +44,11 @@ export class Fighter {
   height: number;
   invulnT = 0;
   protected slamPending = false;
+  /**
+   * floating in deep water: swim pose (motion.ts), 45 % speed, no attacks, Space = splash-hop. Not
+   * grounded while swimming (so no jumps / slams / belly bumps start), the anim gets its own flag.
+   */
+  swimming = false;
 
   constructor(public rig: ChonkRig, x: number, z: number, public maxHp: number, radius = 0.6, height = 1.6) {
     this.anim = makeAnimator(rig);
@@ -69,6 +75,7 @@ export class Fighter {
   }
 
   startMove(m: MoveName) {
+    if (this.swimming) return; // no kung fu while dog-paddling
     this.move = m;
     this.moveTime = 0;
     this.strikeId++;
@@ -134,11 +141,28 @@ export class Fighter {
     if (this.ko) this.koT += dt;
     if (!this.canAct()) { wx = 0; wz = 0; }
 
-    const inWater = this.pos.y < WATER_LEVEL - 0.3;
-    if (inWater) speed *= 0.5;
+    // water: deep enough (relative to the legs) = swim, else wade
+    const ground = groundAt(this.pos.x, this.pos.z);
+    const depth = WATER_LEVEL - ground;
+    const hb = this.rig.hipBase;
+    const swimDepth = Math.max(0.6, hb * 0.9);
+    // float with the head and shoulders out (the swim pose pitches the body forward around the hips)
+    // (touching the bottom in the shallows, rising onto the feet where the swim ends: no pop)
+    const floatY = Math.max(WATER_LEVEL - hb * 1.38, ground - 0.25 * clamp((depth - swimDepth + 0.15) / 0.3, 0, 1));
+    if (!this.swimming) {
+      if (!this.ko && depth > swimDepth && this.pos.y < WATER_LEVEL - swimDepth + 0.05 && this.vel.y <= 0) {
+        this.swimming = true;
+        this.grounded = false;
+        this.slamPending = false;
+        this.move = null;
+        this.strikeActive = false;
+      }
+    } else if (this.ko || depth < swimDepth - 0.15) this.swimming = false;
+    if (this.swimming) speed *= 0.45;
+    else if (depth > 0.25 && this.pos.y < WATER_LEVEL - 0.2) speed *= 0.65; // wading
     if (this.move) speed *= this.move === 'belly' ? 0.25 : 0.35;
-    // velocity eases toward the target (time constant ~0.15 s on the ground, sluggish in the air / stunned)
-    const tau = !this.grounded ? 0.6 : this.stunT > 0 ? 0.45 : Math.hypot(wx, wz) > 0.05 ? 0.15 : 0.1;
+    // velocity eases toward the target (time constant ~0.15 s on the ground, sluggish in the air / stunned / in water)
+    const tau = this.swimming ? 0.4 : !this.grounded ? 0.6 : this.stunT > 0 ? 0.45 : Math.hypot(wx, wz) > 0.05 ? 0.15 : 0.1;
     const k = 1 - Math.exp(-dt / tau);
     this.vel.x += (wx * speed - this.vel.x) * k;
     this.vel.z += (wz * speed - this.vel.z) * k;
@@ -146,7 +170,7 @@ export class Fighter {
       // turn toward the movement direction with a capped turn rate, like a real body
       const want = face ?? (Math.hypot(wx, wz) > 0.1 ? Math.atan2(wx, wz) : null);
       if (want !== null) {
-        const maxTurn = (this.move ? 5 : 11) * dt;
+        const maxTurn = (this.swimming ? 4 : this.move ? 5 : 11) * dt;
         const d = angleDelta(this.heading, want);
         const step = Math.max(-maxTurn, Math.min(maxTurn, d));
         this.turnRate = step / dt;
@@ -162,8 +186,18 @@ export class Fighter {
     if (jump && this.grounded && !this.move && this.canAct()) {
       this.vel.y = 8.5;
       this.grounded = false;
+    } else if (jump && this.swimming && this.canAct()) {
+      // splash-hop: out of the water and onto a bank
+      this.swimming = false;
+      this.vel.y = 8;
+      this.vel.x += Math.sin(this.heading) * 1.5;
+      this.vel.z += Math.cos(this.heading) * 1.5;
     }
-    this.vel.y -= GRAVITY * dt;
+    if (this.swimming) {
+      // buoyancy: a damped spring to the float height with a gentle bob (no gravity)
+      const bob = Math.sin(this.t * 2.4 + this.id) * 0.035;
+      this.vel.y += ((floatY + bob - this.pos.y) * 40 - this.vel.y * 8) * dt;
+    } else this.vel.y -= GRAVITY * dt;
 
     let nx = this.pos.x + this.vel.x * dt, nz = this.pos.z + this.vel.z * dt;
     const hHere = groundAt(this.pos.x, this.pos.z), hNext = groundAt(nx, nz);
@@ -180,7 +214,10 @@ export class Fighter {
     this.pos.z = clamp(r.z, -268, 268);
     this.pos.y += this.vel.y * dt;
     const floor = Math.max(groundAt(this.pos.x, this.pos.z), WATER_LEVEL - 1.1);
-    if (this.pos.y <= floor + (this.grounded && this.vel.y <= 0 ? 0.35 : 0)) {
+    if (this.swimming) {
+      this.pos.y = Math.max(this.pos.y, groundAt(this.pos.x, this.pos.z) - 0.3);
+      this.grounded = false;
+    } else if (this.pos.y <= floor + (this.grounded && this.vel.y <= 0 ? 0.35 : 0)) {
       if (!this.grounded && this.slamPending) {
         this.slamPending = false;
         this.startMove('slam');
@@ -192,13 +229,16 @@ export class Fighter {
     if (this.grounded && (Math.hypot(wx, wz) < 0.05 || this.ko)) {
       this.vel.x *= Math.exp(-10 * dt);
       this.vel.z *= Math.exp(-10 * dt);
+    } else if (this.swimming && Math.hypot(wx, wz) < 0.05) {
+      this.vel.x *= Math.exp(-2.5 * dt); // glide to a stop
+      this.vel.z *= Math.exp(-2.5 * dt);
     }
 
     this.anim.update(
       {
         t: this.t,
         speed: Math.hypot(this.vel.x, this.vel.z),
-        grounded: this.grounded,
+        grounded: this.grounded || this.swimming,
         vy: this.vel.y,
         move: this.move,
         moveT: this.moveProgress(),
@@ -206,6 +246,8 @@ export class Fighter {
         ko: this.ko,
         angry: this.angry,
         fighting: this.fighting,
+        turn: this.turnRate,
+        swimming: this.swimming,
       },
       dt,
     );
@@ -213,7 +255,7 @@ export class Fighter {
     this.object.rotation.y = this.heading;
     // lean into turns, proportional to speed (Sketchbook-style)
     const sp = Math.hypot(this.vel.x, this.vel.z);
-    this.lean = damp(this.lean, clamp(-this.turnRate * sp * 0.035, -0.28, 0.28), 8, dt);
+    this.lean = damp(this.lean, this.swimming ? 0 : clamp(-this.turnRate * sp * 0.035, -0.28, 0.28), 8, dt);
     this.object.rotation.z = this.lean;
   }
 }

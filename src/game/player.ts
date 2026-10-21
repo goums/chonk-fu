@@ -5,9 +5,14 @@ import { buildCharacter } from '../chonk/characters';
 import type { Intent } from '../core/input';
 import { Fighter } from './fighter';
 
-/** ground speeds (m/s): a chubby cat jogs, he doesn't sprint like a car */
-export const RUN_SPEED = 5;
-export const WALK_SPEED = 1.2;
+/**
+ * ground speeds (m/s) in a 560 m valley: Le Chonk runs by default, sprints with Shift, walks with Alt / C.
+ * Enemies (enemy.ts) run 5.4 (wolves) to 6.2 (enraged tiger): running outpaces them, sprinting leaves them.
+ * In deep water he swims at 45 % of these (fighter.ts).
+ */
+export const RUN_SPEED = 7;
+export const SPRINT_SPEED = 10;
+export const WALK_SPEED = 1.6;
 
 export class Player extends Fighter {
   /** queued follow-up in the jab -> cross -> kick combo */
@@ -24,7 +29,7 @@ export class Player extends Fighter {
 
   /** one 60 Hz step. camYaw: camera yaw so input is camera-relative */
   step(dt: number, intent: Intent, camYaw: number) {
-    if (this.canAct()) {
+    if (this.canAct() && !this.swimming) {
       if (intent.belly && !this.move && this.grounded && this.chi >= this.bellyCost) {
         this.chi -= this.bellyCost;
         this.startMove('belly');
@@ -58,7 +63,8 @@ export class Player extends Fighter {
     if (len > 1) { ix /= len; iz /= len; }
     const sn = Math.sin(camYaw), cs = Math.cos(camYaw);
     const wx = -sn * iz + cs * ix, wz = -cs * iz - sn * ix;
-    this.physics(dt, wx, wz, intent.run ? RUN_SPEED : WALK_SPEED, intent.face ?? null, intent.jump);
+    const speed = intent.sprint ? SPRINT_SPEED : intent.run ? RUN_SPEED : WALK_SPEED;
+    this.physics(dt, wx, wz, speed, intent.face ?? null, intent.jump);
 
     // slow regeneration out of combat
     this.regenDelay = this.hurtT < 6 ? 1 : 0;

@@ -6,6 +6,7 @@ import { fbm, rng } from '../core/math';
 import { Batch, box, cyl, kitMaterial } from '../world/kit';
 import { groundAt } from '../world/world';
 import { addCircle, removeCollider, type Collider } from './colliders';
+import { excludeFromAO, sparkles } from './highlight';
 
 export type ItemKind = 'jade' | 'peach' | 'shoot' | 'mushroom' | 'dumpling';
 export const ITEM_NAMES: Record<ItemKind, string> = {
@@ -108,12 +109,18 @@ export class Pickup extends Entity {
         new THREE.MeshBasicMaterial({ color: 0x6bffa8, transparent: true, opacity: 0.18, depthWrite: false, side: THREE.DoubleSide, fog: false, blending: THREE.AdditiveBlending }),
       );
       this.beam.position.y = 15;
+      this.beam.userData.fx = true; // not part of the highlight rim
+      excludeFromAO(this.beam);
       this.obj.add(this.beam);
       const light = new THREE.PointLight(0x6bffa8, 6, 8, 2);
       light.position.y = 1;
       this.obj.add(light);
     }
-    this.t0 = Math.random() * 6;
+    // twinkling motes rising around it: "pick me up"
+    let seed = 0;
+    for (let i = 0; i < id.length; i++) seed = (seed * 31 + id.charCodeAt(i)) % 100000;
+    this.obj.add(item === 'jade' ? sparkles(0x7dffb8, 14, 0.75, seed, 0.06, 1.8) : sparkles(0xffe7a0, 8, 0.55, seed, 0.045, 1.2));
+    this.t0 = (seed % 600) / 100;
   }
   spawnPop() {
     this.pop = 1;

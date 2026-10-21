@@ -14,9 +14,13 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls: string, parent: 
 const UI = `${import.meta.env.BASE_URL}ui/`;
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
-/** speaker -> portrait file in public/ui (The Oracle gets a drawn jade glyph) */
+/** speaker -> portrait file in public/ui (The Oracle gets a drawn jade glyph); NPCs map by species below */
 const PORTRAITS: Record<string, string> = {
-  'Le Chonk': 'chonk', 'Papa Canard': 'canard', 'Master Tortue': 'tortue', Overfit: 'overfit', Villager: 'villager',
+  'Le Chonk': 'chonk', 'Papa Canard': 'canard', 'Master Tortue': 'tortue', Overfit: 'overfit',
+};
+/** character species -> portrait, for named villagers ("Bao" the pig, "Lin" the bunny...) */
+const KIND_PORTRAIT: Record<string, string> = {
+  chonk: 'chonk', duck: 'canard', tortoise: 'tortue', tiger: 'overfit', pig: 'villager', bunny: 'bunny',
 };
 
 /** calligraphy subtitle for each region reveal */
@@ -57,8 +61,11 @@ const ORACLE_GLYPH = `<svg viewBox="0 0 100 100" class="oracle-glyph" aria-hidde
   <path d="M50 12v8M50 80v8M12 50h8M80 50h8" stroke="#8ff0c4" stroke-width="2" stroke-linecap="round" opacity=".7"/>
 </svg>`;
 
-const portraitHtml = (who: string) =>
-  who === 'The Oracle' ? ORACLE_GLYPH : PORTRAITS[who] ? `<img src="${UI}${PORTRAITS[who]}.webp" alt="">` : `<span class="initial">${esc(who[0] ?? '?')}</span>`;
+const portraitHtml = (who: string, kind?: string) => {
+  if (who === 'The Oracle') return ORACLE_GLYPH;
+  const file = PORTRAITS[who] ?? (kind ? KIND_PORTRAIT[kind] : undefined);
+  return file ? `<img src="${UI}${file}.webp" alt="">` : `<span class="initial">${esc(who[0] ?? '?')}</span>`;
+};
 
 const FLOURISH = `<svg class="flourish" viewBox="0 0 400 16" preserveAspectRatio="none" aria-hidden="true">
   <path d="M0 8H178M222 8H400" stroke="currentColor" stroke-width="1"/>
@@ -83,6 +90,8 @@ export class Hud {
   private quest: HTMLElement;
   private inv: HTMLElement;
   private compassMarks: HTMLElement;
+  private compassTargets!: HTMLElement;
+  private targetEls: { el: HTMLElement; dist: HTMLElement; name: HTMLElement; arrow: HTMLElement }[] = [];
   private dialog: HTMLElement;
   private dlgPortrait: HTMLElement;
   private dlgWho: HTMLElement;
@@ -144,12 +153,13 @@ export class Hud {
     this.hpFill = el('div', 'hp-fill', hp);
     const row = el('div', 'hp-row', vit);
     this.hpNum = el('span', 'hp-num', row);
-    this.bellyTag = el('span', 'belly-tag', row, '<kbd>L</kbd>Belly Bump');
+    this.bellyTag = el('span', 'belly-tag', row, '<kbd>K</kbd>Belly Bump');
 
     // ---- compass
     const compass = el('div', 'compass hud-fade', root);
     el('div', 'compass-line', compass);
     this.compassMarks = el('div', 'compass-strip', compass);
+    this.compassTargets = el('div', 'compass-targets hud-fade', root);
     el('div', 'compass-needle', compass);
 
     // ---- quest tracker
@@ -163,7 +173,7 @@ export class Hud {
     this.feed = el('div', 'item-feed', root);
 
     // ---- prompt
-    this.prompt = el('div', 'prompt', root, '<kbd>E</kbd><span class="verb">Talk to</span>');
+    this.prompt = el('div', 'prompt', root, '<kbd class="wide">Enter</kbd><span class="verb">Talk to</span>');
     this.promptName = el('span', 'who', this.prompt);
 
     // ---- boss
@@ -181,11 +191,11 @@ export class Hud {
     const body = el('div', 'dlg-body', inner);
     this.dlgWho = el('div', 'dlg-who', body);
     this.dlgText = el('div', 'dlg-text', body);
-    this.dlgNext = el('div', 'dlg-next', inner, '<kbd>E</kbd><span>▸</span>');
+    this.dlgNext = el('div', 'dlg-next', inner, '<kbd class="wide">Enter</kbd><span>▸</span>');
 
     el('div', 'help', root, [
-      ['← ↑ → ↓', 'move'], ['Mouse', 'look'], ['Space', 'jump'], ['J', 'punch'], ['K', 'kick'], ['L', 'belly bump'], ['E', 'talk'], ['Shift', 'walk'],
-    ].map(([k, v]) => `<span><kbd>${k}</kbd>${v}</span>`).join(''));
+      ['Arrows', 'move'], ['Shift', 'sprint'], ['Space', 'jump'], ['J', 'punch (combo)'], ['K', 'belly bump'], ['Enter', 'talk'], ['', 'drag mouse to look'],
+    ].map(([k, v]) => `<span>${k ? `<kbd>${k}</kbd>` : ''}${v}</span>`).join(''));
     this.end = el('div', 'end', root);
   }
 
@@ -275,17 +285,29 @@ export class Hud {
       else if (k % 3 === 0) marks.push(`<div class="cm mid" style="left:${x}%;opacity:${fade}">${['NE', 'SE', 'SW', 'NW'][(k - 3) / 6]}</div>`);
       else marks.push(`<div class="cm tick" style="left:${x}%;opacity:${fade}"></div>`);
     }
-    g.targets().forEach((t, i) => {
+    this.compassMarks.innerHTML = marks.join('');
+    // objective markers: persistent elements (so their CSS pulse keeps running), jade gems with a distance
+    // label; the primary objective pins to the edge with an arrow when it is behind you
+    const targets = g.dialog ? [] : g.targets();
+    let used = 0;
+    targets.forEach((t, i) => {
       const b = Math.atan2(t.x - P.pos.x, t.z - P.pos.z);
       const dist = Math.hypot(t.x - P.pos.x, t.z - P.pos.z);
       let d = rel(b);
-      const off = Math.abs(d) > HALF * 0.94;
+      const lim = HALF * 0.9;
+      const off = Math.abs(d) > lim;
       if (off && i > 0) return;
-      d = Math.max(-HALF * 0.94, Math.min(HALF * 0.94, d));
-      const arrow = off ? (d > 0 ? '<em>‹</em>' : '<em>›</em>') : '';
-      marks.push(`<div class="cm target ${i === 0 ? 'primary' : ''} ${off ? 'edge' : ''}" style="left:${xOf(d)}%">${arrow}<i></i><small>${Math.round(dist)} m</small></div>`);
+      d = Math.max(-lim, Math.min(lim, d));
+      const m = this.targetEl(used++);
+      m.el.style.left = `${xOf(d)}%`;
+      m.el.className = `cm target${i === 0 ? ' primary' : ''}${off ? ` edge ${d > 0 ? 'left' : 'right'}` : ''}${i === 0 && Math.abs(rel(b)) < 0.3 ? ' center' : ''}${dist < 12 ? ' here' : ''}`;
+      const ds = dist < 1000 ? `${Math.round(dist)} m` : `${(dist / 1000).toFixed(1)} km`;
+      if (m.dist.textContent !== ds) m.dist.textContent = ds;
+      if (m.name.textContent !== t.name) m.name.textContent = t.name;
+      m.arrow.textContent = d > 0 ? '‹' : '›';
+      m.el.style.display = '';
     });
-    this.compassMarks.innerHTML = marks.join('');
+    for (let k = used; k < this.targetEls.length; k++) this.targetEls[k].el.style.display = 'none';
 
     // ---- interaction prompt
     const it = g.dialog ? null : g.interactable();
@@ -301,7 +323,7 @@ export class Hud {
         this.typed = 0;
         if (line.who !== this.dlgSpeaker) {
           this.dlgSpeaker = line.who;
-          this.dlgPortrait.innerHTML = portraitHtml(line.who);
+          this.dlgPortrait.innerHTML = portraitHtml(line.who, g.npcs.find((n) => n.name === line.who)?.kind);
           this.dlgPortrait.classList.toggle('oracle', line.who === 'The Oracle');
           this.dlgWho.innerHTML = `<span>${esc(line.who)}</span><i></i>`;
           this.dialog.classList.remove('swap');
@@ -338,6 +360,14 @@ export class Hud {
       if (ev.type === 'end') this.showEnd();
     }
     this.tickNotes(dt);
+  }
+
+  private targetEl(i: number) {
+    while (this.targetEls.length <= i) {
+      const e = el('div', 'cm target', this.compassTargets, '<span class="tg-pulse"></span><i class="tg-gem"></i><em class="tg-arrow"></em><small><b class="tg-name"></b><span class="tg-dist"></span></small>');
+      this.targetEls.push({ el: e, dist: e.querySelector('.tg-dist')!, name: e.querySelector('.tg-name')!, arrow: e.querySelector('.tg-arrow')! });
+    }
+    return this.targetEls[i];
   }
 
   // ------------------------------------------------------------------ notifications

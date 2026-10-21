@@ -1,5 +1,5 @@
 // Third-person orbit camera that follows Le Chonk, never dips under the terrain, and auto-trails
-// behind him when he runs.
+// behind him when he runs. It orbits only while the player drags with a mouse button held (input.ts).
 import * as THREE from 'three';
 import { angleDelta, clamp, damp } from '../core/math';
 import { heightAt } from '../world/terrain';
@@ -16,8 +16,9 @@ export class FollowCamera {
   constructor(public camera: THREE.PerspectiveCamera) {}
 
   private pull = 0;
-  update(dt: number, focus: THREE.Vector3, heading: number, moving: boolean, look: { dx: number; dy: number; wheel: number }, vel?: THREE.Vector3) {
-    if (look.dx || look.dy) this.idle = 0;
+  update(dt: number, focus: THREE.Vector3, heading: number, moving: boolean, look: { dx: number; dy: number; wheel: number; held?: boolean }, vel?: THREE.Vector3) {
+    // a drag in progress (even a still one) keeps the camera where the player put it
+    if (look.dx || look.dy || look.held) this.idle = 0;
     else this.idle += dt;
     this.yaw -= look.dx * 0.004;
     this.pitch = clamp(this.pitch + look.dy * 0.003, -0.15, 1.2);
@@ -33,7 +34,7 @@ export class FollowCamera {
     // look a little ahead of where the hero runs, follow softly, pull back a bit at speed
     const ax = vel ? vel.x * 0.3 : 0, az = vel ? vel.z * 0.3 : 0;
     const speed = vel ? Math.hypot(vel.x, vel.z) : 0;
-    this.pull = damp(this.pull, Math.min(1, speed / 5) * 0.12, 3, dt);
+    this.pull = damp(this.pull, Math.min(1, speed / 8) * 0.12, 3, dt);
     this.target.x = damp(this.target.x, focus.x + ax, 7, dt);
     this.target.y = damp(this.target.y, focus.y + 1.5, 4, dt);
     this.target.z = damp(this.target.z, focus.z + az, 7, dt);

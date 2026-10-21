@@ -8,8 +8,8 @@ import { Fighter } from './fighter';
 export interface EnemyDef { kind: 'wolf' | 'tiger'; x: number; z: number; camp: string; loot?: string }
 
 const STATS = {
-  wolf: { hp: 45, run: 4.4, walk: 1.8, reach: 1.75, aggro: 15, leash: 32, power: 0.6, cool: [1.0, 1.9], radius: 0.55, height: 1.8 },
-  tiger: { hp: 320, run: 5.4, walk: 2.2, reach: 2.2, aggro: 22, leash: 60, power: 1.25, cool: [0.6, 1.2], radius: 0.75, height: 2.3 },
+  wolf: { hp: 45, run: 5.4, walk: 1.8, reach: 1.75, aggro: 15, leash: 32, power: 0.6, cool: [1.0, 1.9], radius: 0.55, height: 1.8 },
+  tiger: { hp: 320, run: 6.0, walk: 2.2, reach: 2.2, aggro: 22, leash: 60, power: 1.25, cool: [0.6, 1.2], radius: 0.75, height: 2.3 },
 };
 
 /** shared attack tokens so only a couple of enemies strike at once */

@@ -10,9 +10,10 @@ import { resolveStrikes, type HitEvent } from './combat';
 import { Enemy, tokens } from './enemy';
 import { Breakable, Debris, FruitTree, ITEM_NAMES, Pickup, type Entity, type ItemKind } from './entities';
 import { Effects } from './fx';
-import { NPC } from './npc';
+import { Highlight, setFxTime } from './highlight';
+import { NPC, type NpcContext } from './npc';
 import { Player } from './player';
-import { Oracle, buildCamp } from './props';
+import { ObjectiveBeacon, Oracle, buildCamp } from './props';
 
 export interface Line { who: string; text: string }
 export interface Objective { text: string; done?: boolean; target?: { x: number; z: number; name: string } }
@@ -56,7 +57,8 @@ export class Game {
   inv: Record<ItemKind, number> = { jade: 0, peach: 0, shoot: 0, mushroom: 0, dumpling: 0 };
   jadeFound = new Set<string>();
   discovered = new Set<string>();
-  dialog: { lines: Line[]; i: number; onEnd?: () => void } | null = null;
+  /** the dialog on screen; `with` is the id of the NPC Le Chonk is talking to */
+  dialog: { lines: Line[]; i: number; onEnd?: () => void; with?: string } | null = null;
   bellyCooldown = 0;
   tiger: Enemy | null = null;
   ended = false;
@@ -64,6 +66,9 @@ export class Game {
   private struck = new Map<string, number>();
   private seq = 0;
   private rand = rng(2024);
+  private highlights = new Map<object, Highlight>();
+  private beacon = new ObjectiveBeacon();
+  private fxT = 0;
 
   constructor(public scene: THREE.Scene) {
     this.player = new Player(VILLAGE.x, VILLAGE.z + 4);
@@ -76,14 +81,21 @@ export class Game {
     const canard = new NPC('canard', 'Papa Canard', 'duck', SPOTS.canard.x, SPOTS.canard.z, 0, 1.6);
     const tortue = new NPC('tortue', 'Master Tortue', 'tortoise', SPOTS.tortue.x, SPOTS.tortue.z, 0.6, 1.4);
     this.npcs.push(canard, tortue);
-    // villagers strolling nowhere in particular (decor)
+    // villagers strolling around their homes; each has a name (their dialog portrait follows their species)
     const R = rng(5);
-    const villagers: ['pig' | 'bunny', number, number][] = [['pig', 14, 22], ['bunny', -18, 38], ['pig', -36, 22], ['bunny', 30, 37], ['bunny', 4, -12], ['pig', 22, 23]];
-    for (const [k, x, z] of villagers) this.npcs.push(new NPC(`villager-${this.npcs.length}`, 'Villager', k, x, z, R() * 6, 1.3));
+    const villagers: [string, 'pig' | 'bunny', number, number][] = [
+      ['Bao', 'pig', 14, 22], ['Lin', 'bunny', -18, 38], ['Dou Dou', 'pig', -36, 22], ['Yue', 'bunny', 30, 37], ['Xiao Tu', 'bunny', 4, -12], ['Pang', 'pig', 22, 23],
+    ];
+    for (const [name, k, x, z] of villagers) {
+      const v = new NPC(`villager-${this.npcs.length}`, name, k, x, z, R() * 6, 1.3);
+      v.wanders = true;
+      this.npcs.push(v);
+    }
     for (const n of this.npcs) {
       scene.add(n.object);
       if (n.id.startsWith('villager')) n.setMarker(null);
     }
+    scene.add(this.beacon.group);
 
     this.oracle = new Oracle(SPOTS.oracle.x, SPOTS.oracle.z, 0);
     scene.add(this.oracle.group);
@@ -214,6 +226,12 @@ export class Game {
   }
 
   talk(id: string) {
+    const before = this.dialog;
+    this.talkLines(id);
+    if (this.dialog && this.dialog !== before) this.dialog.with = id;
+  }
+
+  private talkLines(id: string) {
     const C = 'Papa Canard', T = 'Master Tortue', O = 'The Oracle', ME = 'Le Chonk';
     if (id === 'canard') {
       const noodlesReady = this.noodles === 'active' && this.inv.peach >= 3 && this.inv.shoot >= 3 && this.inv.mushroom >= 3;
@@ -221,7 +239,7 @@ export class Game {
         return this.say(
           [
             { who: C, text: 'Chonk, my little dumpling! Wolf bandits raced through the village and knocked my delivery crates over!' },
-            { who: C, text: 'Smash those crates next to the shop, would you? There should still be dumplings inside. Punch with J, or click.' },
+            { who: C, text: 'Smash those crates next to the shop, would you? There should still be dumplings inside. Punch with J.' },
             { who: ME, text: 'Smashing things AND dumplings? Miaou, say no more.' },
           ],
           () => this.setStage('crates'),
@@ -274,7 +292,7 @@ export class Game {
             { who: T, text: 'Ah, Le Chonk. I was expecting you... about forty minutes ago. Never mind.' },
             { who: T, text: 'The Oracle of the Palace has gone silent. It is a very large thinking machine, and it runs on five magic Jade Stones.' },
             { who: T, text: 'The wolf bandits scattered the stones across the Valley. Find all five and bring them to the Oracle.' },
-            { who: T, text: 'One sleeps inside a cracked boulder in the Bamboo Forest. Only a mighty belly can open it: press L.' },
+            { who: T, text: 'One sleeps inside a cracked boulder in the Bamboo Forest. Only a mighty belly can open it: press K.' },
             { who: T, text: 'One rests on the islet of the Lotus Pond. The Old Peach Tree, west of here, hides one in its branches.' },
             { who: T, text: 'The bandits locked one in their chest beyond the north bridge. And one hides in a vase at the Palace. Follow the green lights.' },
           ],
@@ -319,7 +337,8 @@ export class Game {
         'I saw a green light shining on the pond islet last night.',
         'The Palace vases are older than my grandmother. Please do not smash them all.',
       ];
-      return this.say([{ who: 'Villager', text: lines[Number(id.split('-')[1]) % lines.length] }]);
+      const v = this.npcs.find((n) => n.id === id);
+      return this.say([{ who: v?.name ?? 'Villager', text: lines[Number(id.split('-')[1]) % lines.length] }]);
     }
   }
 
@@ -351,7 +370,7 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ interaction helpers
-  /** what E would interact with right now */
+  /** what Enter would interact with right now */
   interactable(): { id: string; name: string } | null {
     const p = this.player.pos;
     let best: { id: string; name: string; d: number } | null = null;
@@ -367,6 +386,8 @@ export class Game {
   private collect(p: Pickup) {
     p.alive = false;
     this.scene.remove(p.obj);
+    this.highlights.get(p)?.dispose(this.scene);
+    this.highlights.delete(p);
     this.stats.items++;
     this.events.push({ type: 'sound', id: p.item === 'jade' ? 'jade' : 'pickup' });
     if (p.item === 'dumpling') {
@@ -397,7 +418,7 @@ export class Game {
 
   // ------------------------------------------------------------------ step
   step(dt: number, intent: Intent, camYaw: number) {
-    // dialog: E / Enter / punch advances, the world waits
+    // dialog: Enter / punch advances, the world waits
     if (this.dialog) {
       if (intent.interact || intent.punch) {
         this.dialog.i++;
@@ -410,7 +431,9 @@ export class Game {
       }
       const still = { ...intent, moveX: 0, moveZ: 0, punch: false, kick: false, belly: false, jump: false, interact: false };
       this.player.step(dt, still, camYaw);
-      for (const n of this.npcs) n.update(dt, this.player.pos.x, this.player.pos.z, true);
+      const ctx = this.npcContext();
+      for (const n of this.npcs) n.update(dt, ctx);
+      this.updateCues(dt, true);
       return;
     }
     if (this.hitStop > 0) {
@@ -434,7 +457,8 @@ export class Game {
     this.player.bellyCost = 0;
     this.player.step(dt, want, camYaw);
 
-    for (const n of this.npcs) n.update(dt, this.player.pos.x, this.player.pos.z, false);
+    const ctx = this.npcContext();
+    for (const n of this.npcs) n.update(dt, ctx);
     for (const e of this.enemies) e.step(dt, this.player);
     for (const e of this.entities) e.update(dt, this.t);
     this.oracle.draw(this.t);
@@ -545,9 +569,61 @@ export class Game {
       this.campFire.fire.scale.set(f, 1 + (f - 1) * 2, f);
       this.campFire.inner.scale.set(f, 1 + (f - 1) * 3, f);
     }
+    this.updateCues(dt, false);
     this.fx.update(dt);
     this.debris.update(dt);
     this.shake = Math.max(0, this.shake - dt * 1.5);
+  }
+
+  private npcContext(): NpcContext {
+    const P = this.player.pos, d = this.dialog;
+    const line = d ? d.lines[Math.min(d.i, d.lines.length - 1)] : null;
+    return {
+      px: P.x, py: P.y, pz: P.z,
+      dialog: d && line ? { with: d.with ?? null, i: d.i, who: line.who, text: line.text } : null,
+      cheer: this.ended,
+    };
+  }
+
+  // ------------------------------------------------------------------ interaction cues
+  /** highlight what Le Chonk can use nearby (rim glow + ground ring), and the beacon over the objective */
+  private updateCues(dt: number, inDialog: boolean) {
+    this.fxT += dt;
+    setFxTime(this.fxT);
+    const t = this.fxT, P = this.player.pos;
+    const focus = inDialog ? null : this.interactable()?.id;
+    const RANGE = 6;
+    const hl = (key: object, target: THREE.Object3D, color: number, ring: number) => {
+      let h = this.highlights.get(key);
+      if (!h) this.highlights.set(key, (h = new Highlight(target, this.scene, color, ring)));
+      return h;
+    };
+    for (const e of this.entities) {
+      const d = Math.hypot(e.x - P.x, e.z - P.z) - e.radius;
+      let usable = e.alive;
+      if (e instanceof FruitTree) usable &&= e.hitsLeft > 0;
+      const level = !inDialog && usable && d < RANGE && Math.abs(e.y - P.y) < 4 ? 1 : 0;
+      const known = this.highlights.get(e);
+      if (!level && !known) continue;
+      const color = e instanceof Pickup ? (e.item === 'jade' ? 0x6bffa8 : 0xffe08a) : e instanceof Breakable && e.locked ? 0xff6a4a : 0xffc861;
+      const h = known ?? hl(e, e.obj, color, e.radius + 0.55);
+      if (e instanceof Breakable) h.setColor(color); // the chest turns gold once unguarded
+      h.set(level, dt, t);
+    }
+    for (const n of this.npcs) {
+      const d = Math.hypot(n.x - P.x, n.z - P.z);
+      const level = inDialog ? 0 : n.id === focus ? 2 : d < RANGE ? 1 : 0;
+      if (!level && !this.highlights.has(n)) continue;
+      hl(n, n.object, 0xffe6a8, 0.95).set(level, dt, t);
+    }
+    {
+      const d = Math.hypot(this.oracle.x - P.x, this.oracle.z - P.z);
+      const level = inDialog ? 0 : focus === 'oracle' ? 2 : d < RANGE + 2 ? 1 : 0;
+      if (level || this.highlights.has(this.oracle)) hl(this.oracle, this.oracle.group, 0x6bffa8, 2.8).set(level, dt, t);
+    }
+    // the light column over the current objective
+    const tg = inDialog ? null : this.targets()[0] ?? null;
+    this.beacon.update(dt, t, tg, P.x, P.z);
   }
 
   private hitObject(e: Breakable | FruitTree, move: string) {
@@ -564,7 +640,7 @@ export class Game {
     }
     const r = e.hit(move);
     if (r === 'immune') {
-      this.fx.text('TOO HARD! Belly bump (L)', e.x, e.y + 2.6, e.z, '#ffffff', 0.9);
+      this.fx.text('TOO HARD! Belly bump (K)', e.x, e.y + 2.6, e.z, '#ffffff', 0.9);
       this.events.push({ type: 'sound', id: 'clank' });
     } else if (r === 'locked') {
       this.fx.text('GUARDED!', e.x, e.y + 1.8, e.z, '#ff8a6a', 0.9);
