@@ -34,7 +34,7 @@ const len = (id: string, pad = 0.6, lead = LEAD) => Math.round((V[id].sec + lead
 
 // ---------------------------------------------------------------- footage: where things happen in the clips
 type TL = { turns: { turn: number; t: number; sec: number }[]; lines: { who: string; text: string; sec: number }[] };
-const GAME = 'footage/game.mp4', PANEL = 'footage/panel.mp4';
+const GAME = 'footage/game.mp4', PANEL = 'footage/panel.mp4', POSE = 'footage/pose.mp4';
 const turnAt = (tl: TL, turn: number, off = 0) => (tl.turns.find((x) => x.turn === turn)?.sec ?? 0) + off;
 const lineAt = (tl: TL, start: string, off = 0) => (tl.lines.find((x) => x.text.startsWith(start))?.sec ?? 0) + off;
 const G = gameTl as TL, P = panelTl as TL;
@@ -140,13 +140,22 @@ const Intro: React.FC = () => {
   const f = useCurrentFrame();
   const { fps } = useVideoConfig();
   const t = pop(f, fps, 8), h = pop(f, fps, 20), sub = fadeIn(f - 34, 14);
-  const out = interpolate(f, [5.2 * fps, 6 * fps], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
+  const out = interpolate(f, [3.0 * fps, 3.6 * fps], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
   return (
     <AbsoluteFill>
       {/* blurred under the title (the game's own place banners would collide with it) */}
-      <AbsoluteFill style={{ filter: `blur(${interpolate(f, [5.0 * fps, 6.2 * fps], [9, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })}px)` }}>
-        <Cuts volume={0.4} cuts={[{ src: GAME, from: 0, sec: 2.7 }, { src: GAME, from: 31.9, sec: 3.6 }, { src: GAME, from: 39.5 }]} />
+      <AbsoluteFill style={{ filter: `blur(${interpolate(f, [2.8 * fps, 3.6 * fps], [9, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })}px)` }}>
+        <Cuts volume={0.4} cuts={[{ src: GAME, from: 0, sec: 3.6 }]} />
       </AbsoluteFill>
+      {/* Le Chonk's face: the camera in front of him, closer */}
+      <Sequence from={Math.round(3.6 * fps)} durationInFrames={Math.round(3.4 * fps)}>
+        <AbsoluteFill style={{ transform: 'scale(1.6)', transformOrigin: '48% 60%' }}>
+          <Footage src={POSE} from={0.8} volume={0.4} />
+        </AbsoluteFill>
+      </Sequence>
+      <Sequence from={Math.round(7.0 * fps)}>
+        <Footage src={GAME} from={68.0} volume={0.5} />
+      </Sequence>
       <AbsoluteFill style={{ background: 'radial-gradient(ellipse at 50% 45%, rgba(5,7,6,0.35), rgba(5,7,6,0.75))', opacity: out * 0.9 + 0.1 }} />
       <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', flexDirection: 'column', opacity: out }}>
         <Img src={staticFile('img/chonk.webp')} style={{ width: 170, height: 170, borderRadius: '50%', objectFit: 'cover', boxShadow: `0 0 0 3px ${C.gold}, 0 0 0 8px rgba(10,10,8,0.7), 0 0 0 10px rgba(217,181,106,0.45), 0 12px 40px rgba(0,0,0,0.6)`, transform: `scale(${pop(f, fps, 2)})` }} />
@@ -154,7 +163,7 @@ const Intro: React.FC = () => {
         <div style={{ fontFamily: HANZI, fontSize: 64, color: C.goldHi, letterSpacing: '0.3em', paddingLeft: '0.3em', marginTop: 14, opacity: h, textShadow: '0 2px 8px rgba(0,0,0,0.7)' }}>功夫胖</div>
         <div style={{ fontFamily: CINZEL, fontWeight: 600, fontSize: 28, letterSpacing: '0.36em', color: C.gold, marginTop: 24, opacity: sub, textShadow: SHADOW }}>A KUNG FU ADVENTURE STARRING LE CHONK</div>
       </AbsoluteFill>
-      <Voice id="intro" delay={1.0} />
+      <Voice id="intro" delay={0.8} />
     </AbsoluteFill>
   );
 };
@@ -162,23 +171,21 @@ const Intro: React.FC = () => {
 const Valley: React.FC = () => (
   <AbsoluteFill>
     <Cuts cuts={[
-      { src: GAME, from: lineAt(G, 'Chonk! Wolf bandits', -0.3), sec: 5.3, caption: ['Papa Canard', 'Wolf bandits!'] },
-      { src: GAME, from: turnAt(G, 2, 0.2), caption: ['Smash everything', 'Crates hide dumplings'] },
+      { src: GAME, from: lineAt(G, 'Chonk! Wolf bandits', -0.3), sec: 4.6, caption: ['Papa Canard', 'Wolf bandits!'] },
+      { src: GAME, from: turnAt(G, 2, 0.2) },
     ]} />
     <Voice id="valley" />
   </AbsoluteFill>
 );
 
-const Stones: React.FC = () => (
+// music only: a taste of the quest, no places named
+const Montage: React.FC = () => (
   <AbsoluteFill>
-    <Cuts cuts={[
-      { src: GAME, from: lineAt(G, 'The wolf bandits took', -0.2), sec: 2.6, caption: ['Master Tortue', 'Find five Jade Stones'] },
-      { src: GAME, from: 28.7, sec: 2.3, caption: ['Jade Stone 1/5', 'The Old Peach Tree'] },
-      { src: GAME, from: 35.5, sec: 2.3, caption: ['Jade Stone 2/5', 'The lotus pond island'] },
-      { src: GAME, from: 52.9, sec: 3.2, caption: ['Jade Stone 3/5', 'Belly jump!'] },
-      { src: GAME, from: 65.6, caption: ['Jade Stone 4/5', 'The wolf camp'] },
+    <Cuts volume={0.6} cuts={[
+      { src: GAME, from: lineAt(G, 'The wolf bandits took', -0.5), sec: 1.9, caption: ['Master Tortue', 'Find the five Jade Stones'] },
+      { src: GAME, from: 43.0, sec: 4.0 },
+      { src: GAME, from: 62.8 },
     ]} />
-    <Voice id="stones" />
   </AbsoluteFill>
 );
 
@@ -186,7 +193,7 @@ const Overfit: React.FC = () => (
   <AbsoluteFill>
     <Cuts cuts={[
       { src: GAME, from: lineAt(G, 'Ha! I am OVERFIT', -0.25), sec: 3.0, caption: ['The boss', 'Overfit the tiger'] },
-      { src: GAME, from: 99.2 },
+      { src: GAME, from: 99.2, caption: ['Overfit', 'Predicted!'] },
     ]} />
     <Voice id="overfit" />
   </AbsoluteFill>
@@ -195,16 +202,15 @@ const Overfit: React.FC = () => (
 const Dragon: React.FC = () => (
   <AbsoluteFill>
     <Cuts cuts={[
-      { src: GAME, from: lineAt(G, '*SLURP*', -0.2), sec: 3.0, caption: ['Dragon Noodles', 'Dragon Chonk!'] },
-      { src: GAME, from: 117.7, sec: 1.6 },
-      { src: GAME, from: 128.6, caption: ['One Dragon Belly', 'Not predicted!'] },
+      { src: GAME, from: 117.9, sec: 3.4, caption: ['A secret power', 'Dragon Chonk?'] },
+      { src: GAME, from: 126.0 },
     ]} />
-    <Voice id="dragon" />
+    <Voice id="dragon" delay={0.8} />
   </AbsoluteFill>
 );
 
 // ---- the harness, over run 2 with the AI panel open
-const OBS_TURN = 12;
+const OBS_TURN = 2;
 const obsTurn = (run2 as { turns: { turn: number; obs: string; thought: string; action: { action: string; target?: string }; ms: number }[] }).turns[OBS_TURN - 1];
 const OBS = obsTurn.obs;
 const ObsCard: React.FC = () => {
@@ -217,10 +223,9 @@ const ObsCard: React.FC = () => {
     <Card style={{ position: 'absolute', left: 84, top: 210, width: 820, padding: '22px 26px', opacity: fadeIn(f - 4, 10) }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
         <div style={{ fontFamily: CINZEL, fontWeight: 600, fontSize: 19, letterSpacing: '0.3em', color: C.gold }}>TURN {OBS_TURN} · WHAT MISTRAL READS</div>
-        <div style={{ fontFamily: SANS, fontWeight: 700, fontSize: 18, color: C.dim }}>text only</div>
       </div>
-      <pre style={{ margin: 0, fontFamily: MONO, fontWeight: 500, fontSize: 17.5, lineHeight: 1.36, color: '#d9e6dc', whiteSpace: 'pre-wrap', height: 690, overflow: 'hidden' }}>
-        {lines.slice(0, shown).map((l, i) => <div key={i} style={{ color: head.test(l) ? C.goldHi : l.includes('rock-1') ? C.orangeHi : undefined, fontWeight: head.test(l) ? 700 : 500 }}>{l || ' '}</div>)}
+      <pre style={{ margin: 0, fontFamily: MONO, fontWeight: 500, fontSize: 22, lineHeight: 1.4, color: '#d9e6dc', whiteSpace: 'pre-wrap', minHeight: 560 }}>
+        {lines.slice(0, shown).map((l, i) => <div key={i} style={{ color: head.test(l) ? C.goldHi : l.includes('crate-1') ? C.orangeHi : undefined, fontWeight: head.test(l) ? 700 : 500 }}>{l || ' '}</div>)}
       </pre>
     </Card>
   );
@@ -230,13 +235,19 @@ const Harness: React.FC = () => {
   const { fps } = useVideoConfig();
   return (
     <AbsoluteFill>
-      <Footage src={PANEL} from={turnAt(P, 10, 0.3)} volume={0.35} />
+      {/* the first turns play, then the world waits on the next one */}
+      <Sequence durationInFrames={Math.round(turnAt(P, OBS_TURN, 0.05) * FPS)}>
+        <Footage src={PANEL} from={0} volume={0.35} />
+      </Sequence>
+      <Sequence from={Math.round(turnAt(P, OBS_TURN, 0.05) * FPS)}>
+        <Footage src={PANEL} from={turnAt(P, OBS_TURN, 0.05)} still />
+      </Sequence>
       <AbsoluteFill style={{ background: 'linear-gradient(90deg, rgba(5,7,6,0.7), rgba(5,7,6,0.25) 55%, transparent)' }} />
       <Heading kicker="MISTRAL PLAYS" title="The harness" seal="智" />
       <ObsCard />
       <div style={{ position: 'absolute', left: 1000, top: 230, display: 'flex', flexDirection: 'column', gap: 18, alignItems: 'flex-start' }}>
         <Chip delay={5.6 * fps} color={C.orange}><MistralM size={28} /> Mistral Large 4</Chip>
-        <Chip delay={9.6 * fps} color={C.gold}>~300 tokens · no images</Chip>
+        <Chip delay={9.0 * fps} color={C.gold}>~300 tokens per turn</Chip>
       </div>
       <Voice id="harness" />
     </AbsoluteFill>
@@ -293,7 +304,7 @@ const Replay: React.FC = () => {
   const { fps } = useVideoConfig();
   return (
     <AbsoluteFill>
-      <Footage src={PANEL} from={35.4} volume={0.6} />
+      <Footage src={PANEL} from={turnAt(P, OBS_TURN, 0.05) + (len('act', 0.6) - Math.round(4.6 * FPS)) / FPS} volume={0.6} />
       <div style={{ position: 'absolute', left: 84, top: 210, display: 'flex', flexDirection: 'column', gap: 18, alignItems: 'flex-start' }}>
         <Chip color={C.orange} delay={4}><MistralM size={28} /> Real thoughts · real run</Chip>
         <Chip color={C.jade} delay={2.4 * fps}>Deterministic: every run replays exactly</Chip>
@@ -313,7 +324,7 @@ const Results: React.FC = () => {
   const { fps } = useVideoConfig();
   return (
     <AbsoluteFill>
-      <Footage src={GAME} from={(gameTl as { sec: number }).sec - 6} volume={0} style={{ filter: 'blur(14px) brightness(0.45)' }} />
+      <Footage src={GAME} from={86} volume={0} style={{ filter: 'blur(14px) brightness(0.45)' }} />
       <Heading kicker="MISTRAL LARGE 4 · NO REASONING" title="Three runs, three wins" seal="胜" x={160} y={110} />
       <div style={{ position: 'absolute', left: 160, right: 160, top: 330, display: 'flex', gap: 40 }}>
         {RUNS.map((r, i) => {
@@ -352,7 +363,7 @@ const Outro: React.FC = () => {
   const b = pop(f, fps, 14);
   return (
     <AbsoluteFill>
-      <Footage src={GAME} from={turnAt(G, 44, -0.5)} volume={0} style={{ filter: 'blur(12px) brightness(0.42)' }} />
+      <Footage src={GAME} from={0.3} volume={0} style={{ filter: 'blur(12px) brightness(0.42)' }} />
       <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 34, transform: `scale(${pop(f, fps, 2)})` }}>
           <Img src={staticFile('img/chonk.webp')} style={{ width: 150, height: 150, borderRadius: '50%', objectFit: 'cover', boxShadow: `0 0 0 3px ${C.gold}, 0 0 0 8px rgba(10,10,8,0.7), 0 12px 40px rgba(0,0,0,0.6)` }} />
@@ -379,12 +390,12 @@ const Outro: React.FC = () => {
 };
 
 // ---------------------------------------------------------------- timeline
-const SCENES: { id: string; C: React.FC; frames: number; voice: string; delay: number }[] = [
-  { id: 'intro', C: Intro, frames: len('intro', 0.8, 1.0), voice: 'intro', delay: 1.0 },
-  { id: 'valley', C: Valley, frames: len('valley', 0.5), voice: 'valley', delay: LEAD },
-  { id: 'stones', C: Stones, frames: len('stones', 0.5), voice: 'stones', delay: LEAD },
-  { id: 'overfit', C: Overfit, frames: len('overfit', 1.0), voice: 'overfit', delay: LEAD },
-  { id: 'dragon', C: Dragon, frames: len('dragon', 2.0), voice: 'dragon', delay: LEAD },
+const SCENES: { id: string; C: React.FC; frames: number; voice?: string; delay: number }[] = [
+  { id: 'intro', C: Intro, frames: Math.round(8.6 * FPS), voice: 'intro', delay: 0.8 },
+  { id: 'valley', C: Valley, frames: len('valley', 3.6), voice: 'valley', delay: LEAD },
+  { id: 'montage', C: Montage, frames: Math.round(10.6 * FPS), delay: 0 },
+  { id: 'overfit', C: Overfit, frames: len('overfit', 2.4), voice: 'overfit', delay: LEAD },
+  { id: 'dragon', C: Dragon, frames: len('dragon', 3.8, 0.8), voice: 'dragon', delay: 0.8 },
   { id: 'harness', C: Harness, frames: len('harness', 0.4), voice: 'harness', delay: LEAD },
   { id: 'act', C: Act, frames: len('act', 0.6), voice: 'act', delay: LEAD },
   { id: 'replay', C: Replay, frames: len('replay', 1.2), voice: 'replay', delay: LEAD },
@@ -403,7 +414,7 @@ export const totalFrames = SCENES.reduce((a, s) => a + s.frames, 0);
 export const sceneStarts = START;
 
 // voice intervals (frames), for ducking the music under speech
-const SPEECH = SCENES.map((s) => [START[s.id] + Math.round(s.delay * FPS), START[s.id] + Math.round((s.delay + V[s.voice].sec) * FPS)]);
+const SPEECH = SCENES.filter((s) => s.voice).map((s) => [START[s.id] + Math.round(s.delay * FPS), START[s.id] + Math.round((s.delay + V[s.voice!].sec) * FPS)]);
 const speaking = (fr: number) => {
   let d = Infinity;
   for (const [a, b] of SPEECH) d = Math.min(d, fr < a ? a - fr : fr > b ? fr - b : 0);
@@ -412,7 +423,7 @@ const speaking = (fr: number) => {
 
 // the game's own score, one mood per part, crossfaded, ducked under the voice
 const BEDS: { track: string; from: string; to: string; level: number }[] = [
-  { track: 'village', from: 'intro', to: 'overfit', level: 0.5 },
+  { track: 'village', from: 'intro', to: 'overfit', level: 0.55 },
   { track: 'combat', from: 'overfit', to: 'harness', level: 0.42 },
   { track: 'palace', from: 'harness', to: 'results', level: 0.5 },
   { track: 'ending', from: 'results', to: 'end', level: 0.5 },

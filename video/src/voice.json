@@ -2,44 +2,37 @@
  {
   "id": "intro",
   "who": "narrator",
-  "text": "In the Valley of Peace lives Le Chonk. He is round. He is orange. He is... a kung fu cat.",
-  "file": "voice/intro-7c26cfb3b2.mp3",
-  "sec": 8.21
+  "text": "Meet Le Chonk. A large, fat French cat... and a kung fu master.",
+  "file": "voice/intro-a4e992d0f6.mp3",
+  "sec": 5.44
  },
  {
   "id": "valley",
   "who": "narrator",
-  "text": "Wolf bandits ran through the village. Papa Canard needs help. So Le Chonk smashes crates... and eats the dumplings.",
-  "file": "voice/valley-b50e8e5b77.mp3",
-  "sec": 7.57
- },
- {
-  "id": "stones",
-  "who": "narrator",
-  "text": "Master Tortue sends him to find five Jade Stones. One in a tree. One on an island. One in a cracked boulder: only a belly can break it. One in the wolf camp.",
-  "file": "voice/stones-f01d1f925c.mp3",
-  "sec": 11.91
+  "text": "Wolf bandits ran through the Valley of Peace. Somebody has to stop them.",
+  "file": "voice/valley-ae6ba6ab56.mp3",
+  "sec": 4.39
  },
  {
   "id": "overfit",
   "who": "narrator",
-  "text": "Then comes Overfit, the tiger. He learned every kung fu move in the world. Punch? Predicted!",
-  "file": "voice/overfit-ed3983e0a4.mp3",
-  "sec": 6.78
+  "text": "And then there is Overfit, the tiger. He has seen every move.",
+  "file": "voice/overfit-cd13d14b18.mp3",
+  "sec": 4.45
  },
  {
   "id": "dragon",
   "who": "narrator",
-  "text": "So Le Chonk eats the Dragon Noodles, and becomes Dragon Chonk. One Dragon Belly... that was not in the training data!",
-  "file": "voice/dragon-033df148e1.mp3",
-  "sec": 7.17
+  "text": "Every move? We will see.",
+  "file": "voice/dragon-833519e0b0.mp3",
+  "sec": 1.75
  },
  {
   "id": "harness",
   "who": "narrator",
-  "text": "But who plays Le Chonk? Mistral Large Four. Every turn, it reads a short text: the quest, its health, the things nearby. About three hundred tokens. No images.",
-  "file": "voice/harness-c09e05fe21.mp3",
-  "sec": 12.4
+  "text": "But who plays Le Chonk? Mistral Large Four. Every turn, it reads a short text: the quest, its health, the things nearby. About three hundred tokens.",
+  "file": "voice/harness-58e070f6fe.mp3",
+  "sec": 11.32
  },
  {
   "id": "act",

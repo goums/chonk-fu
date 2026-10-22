@@ -5,7 +5,7 @@
 **A 3D kung fu adventure in the browser, starring Le Chonk. Mistral can play it for you.**
 
 ▶️ **Play:** https://goums.github.io/chonk-fu/ <br>
-🎬 **Video (1 min 36 s):** https://goums.github.io/chonk-fu/video/chonk-fu.mp4
+🎬 **Video (1 min 28 s):** https://goums.github.io/chonk-fu/video/chonk-fu.mp4
 
 [![Watch the video](public/video/poster.jpg)](https://goums.github.io/chonk-fu/video/chonk-fu.mp4)
 

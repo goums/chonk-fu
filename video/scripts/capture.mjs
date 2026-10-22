@@ -34,10 +34,12 @@ const SHOOTS = {
       [302, 306.21, 1], [306.21, 9999, 2], // the party, the end card
     ],
   },
-  // the AI panel open, with the thoughts (run 2)
+  // Le Chonk's face: the camera swings round to him as the first dialog ends (run 2)
+  face: { run: RUN2, panel: false, linger: 0, windows: [[1.2, 2.22, 2], [2.22, 4, 1]] },
+  // the AI panel open, with the thoughts (run 2): the first quest only, no spoilers
   panel: {
-    run: RUN2, panel: true, linger: 6,
-    windows: [[33.5, 65, 1], [88, 103, 1], [324, 9999, 1]],
+    run: RUN2, panel: true, linger: 0,
+    windows: [[0, 2.22, 2], [2.22, 22.4, 1]],
   },
 };
 fs.mkdirSync(OUT, { recursive: true });
