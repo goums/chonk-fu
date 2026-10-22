@@ -105,7 +105,7 @@ const FR: Record<string, string> = {
 
   // ---- training key hints
   'Punch combo on a dummy': 'Combo de coups sur un mannequin',
-  'Stand still and belly jump onto a dummy': 'Ne bouge pas et fais un saut du ventre sur un mannequin',
+  'Stand still and belly jump onto a dummy': 'Ne bouge pas et fais un belly jump sur un mannequin',
   'Jump, then punch in the air: Ground Slam a dummy': "Saute, puis frappe en l'air : écrase un mannequin",
   'Hold Shift and run: sprint!': 'Garde Maj et cours : sprint !',
   'Spar with Gong: hit him 4 times': "Combat d'entraînement avec Gong : frappe-le 4 fois",
@@ -159,7 +159,7 @@ const FR: Record<string, string> = {
 
   // ---- villagers
   'Is that the Chonk? He is very round!': "C'est le Chonk ? Il est très rond !",
-  'People say one belly jump can break a big rock.': "On dit qu'un saut du ventre peut casser un gros rocher.",
+  'People say one belly jump can break a big rock.': "On dit qu'un belly jump peut casser un gros rocher.",
   'The wolves live past the north bridge. Be careful!': 'Les loups vivent après le pont du nord. Fais attention !',
   "Papa Canard's Dragon Noodles make you very strong!": 'Les Nouilles du Dragon de Papa Canard rendent très fort !',
   'I saw a green light on the pond island last night.': "J'ai vu une lumière verte sur l'île de l'étang, hier soir.",
@@ -171,10 +171,10 @@ const FR: Record<string, string> = {
   'This is the Training Arena. Do you want to train? Great! I will show you the moves.': "Voici l'Arène d'entraînement. Tu veux t'entraîner ? Super ! Je vais te montrer les coups.",
   'First, hit a wooden dummy. Press J three times: punch, punch, kick!': "D'abord, frappe un mannequin en bois. Appuie trois fois sur J : poing, poing, pied !",
   'Wow! You know all the moves now!': 'Waouh ! Maintenant, tu connais tous les coups !',
-  'Here is a Chi Charm. With it, your belly jump is ready faster.': 'Voici un Talisman du Chi. Avec lui, ton saut du ventre est prêt plus vite.',
+  'Here is a Chi Charm. With it, your belly jump is ready faster.': 'Voici un Talisman du Chi. Avec lui, ton belly jump est prêt plus vite.',
   'Thank you, Tao! My belly is ready!': 'Merci beaucoup, Tao ! Mon ventre est prêt !',
   'Stand near a dummy and press J three times: punch, punch, kick!': "Va près d'un mannequin et appuie trois fois sur J : poing, poing, pied !",
-  'Now the belly jump! Stand still and press K.': 'Maintenant, le saut du ventre ! Ne bouge pas et appuie sur K.',
+  'Now the belly jump! Stand still and press K.': 'Maintenant, le belly jump ! Ne bouge pas et appuie sur K.',
   'Press Space to jump. In the air, press J. BOOM!': "Appuie sur Espace pour sauter. En l'air, appuie sur J. BOUM !",
   'Hold Shift while you run. Fast like the wind!': 'Garde Maj appuyé quand tu cours. Rapide comme le vent !',
   'Gong wants to spar. Hit him 4 times! Do not worry, he is friendly.': "Gong veut faire un combat d'entraînement. Frappe-le 4 fois ! N'aie pas peur, il est gentil.",
@@ -184,7 +184,7 @@ const FR: Record<string, string> = {
   'Ha! I am OVERFIT! I learned every kung fu move in the world!': "Ha ! Je suis OVERFIT ! J'ai appris tous les coups de kung-fu du monde !",
   'Wait... why are you so big? And why are you shining?': 'Attends... pourquoi tu es si gros ? Et pourquoi tu brilles ?',
   'Dragon Noodles! Now try THIS BELLY!': 'Nouilles du Dragon ! Et maintenant, goûte à CE VENTRE !',
-  'Punch? I know it. Kick? I know it. Belly jump? I know it too! You cannot win, little cat!': 'Un coup de poing ? Je connais. Un coup de pied ? Je connais. Un saut du ventre ? Je connais aussi ! Tu ne peux pas gagner, petit chat !',
+  'Punch? I know it. Kick? I know it. Belly jump? I know it too! You cannot win, little cat!': 'Un coup de poing ? Je connais. Un coup de pied ? Je connais. Un belly jump ? Je connais aussi ! Tu ne peux pas gagner, petit chat !',
   'We will see!': "C'est ce qu'on va voir !",
   'No! That belly is too strong! It was not in my training data!': "Non ! Ce ventre est trop fort ! Ce n'était pas dans mes données d'entraînement !",
   'No! I did not predict this!': "Non ! Je n'avais pas prévu ça !",
@@ -195,7 +195,7 @@ const FR: Record<string, string> = {
   'The five Jade Stones': 'Les cinq Pierres de Jade',
   'The Scroll of Open Weights': 'Le Parchemin des Poids Ouverts',
   'The Chi Charm': 'Le Talisman du Chi',
-  'Your belly jump is ready faster': 'Ton saut du ventre est prêt plus vite',
+  'Your belly jump is ready faster': 'Ton belly jump est prêt plus vite',
   'Dragon Noodles': 'Nouilles du Dragon',
   'You are Dragon Chonk now': 'Tu es Dragon Chonk maintenant',
   'Get the Dragon Noodles': 'Va chercher les Nouilles du Dragon',
@@ -238,7 +238,7 @@ const FR: Record<string, string> = {
   'WOLVES GUARD IT!': 'GARDÉ PAR LES LOUPS !',
 
   // ---- HUD
-  'Belly Jump': 'Saut du ventre',
+  'Belly Jump': 'Belly Jump',
   'Dragon Belly': 'Ventre du Dragon',
   'Talk to': 'Parler à',
   'He knows every kung fu move': 'Il connaît tous les coups de kung-fu',
@@ -257,7 +257,7 @@ const FR: Record<string, string> = {
   sprint: 'sprinter',
   jump: 'sauter',
   'punch (combo)': 'frapper (combo)',
-  'belly jump': 'saut du ventre',
+  'belly jump': 'belly jump',
   talk: 'parler',
   'drag mouse to look': 'glisse la souris pour regarder',
   'You Did It!': 'Tu as réussi !',
@@ -274,7 +274,7 @@ const FR: Record<string, string> = {
 
   // ---- the AI panel
   'Mistral plays the game for you': 'Mistral joue à ta place',
-  'Let Chonk play': 'Mistral joue',
+  'Let Chonk play': 'Laisser Mistral jouer',
   'Take control': 'Je reprends',
   'Click for music': 'Clique pour la musique',
   'Sound on / off (M)': 'Son activé / coupé (M)',
