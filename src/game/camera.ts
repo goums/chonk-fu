@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { angleDelta, clamp, damp } from '../core/math';
 import { heightAt } from '../world/terrain';
+import { groundAt } from '../world/world';
 import { setOcclusionFocus } from '../world/kit';
 import { CAMERA_SOLID, pointBlocked } from './colliders';
 
@@ -17,6 +18,8 @@ export class FollowCamera {
   constructor(public camera: THREE.PerspectiveCamera) {}
 
   private pull = 0;
+  /** 0..1: how steeply the ground rises ahead (stairs, hills), eased */
+  private climb = 0;
   /** extra pitch from rising ground behind the camera (eased) */
   private lift = 0;
   /** seconds to hold a collision pull-in before easing back out */
@@ -138,17 +141,22 @@ export class FollowCamera {
     const ax = vel ? vel.x * 0.3 : 0, az = vel ? vel.z * 0.3 : 0;
     const speed = vel ? Math.hypot(vel.x, vel.z) : 0;
     this.pull = damp(this.pull, Math.min(1, speed / 8) * 0.12, 3, dt);
+    // climbing (the Thousand Steps, hills): rising ground ahead would fill the view, so pull back
+    // and look up the slope
+    const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw);
+    const rise = groundAt(focus.x + fx * 9, focus.z + fz * 9) - focus.y;
+    this.climb = damp(this.climb, clamp(rise / 9 / 0.6, 0, 1), 2, dt);
     this.target.x = damp(this.target.x, focus.x + ax, 7, dt);
-    this.target.y = damp(this.target.y, focus.y + 1.5, 4, dt);
+    this.target.y = damp(this.target.y, focus.y + 1.5 + this.climb * 2.4, 4, dt);
     this.target.z = damp(this.target.z, focus.z + az, 7, dt);
     if (this.target.distanceTo(focus) > 20) this.target.copy(focus).setY(focus.y + 1.5);
 
-    const full = this.dist * (1 + this.pull);
+    const full = this.dist * (1 + this.pull) + this.climb * 4;
     // rising ground behind the camera: tilt the orbit up a little (bounded, eased) rather than diving in
     let lift = 0;
     while (lift < 0.45 && !this.terrainClear(this.pitch + lift, full)) lift += 0.075;
     this.lift = damp(this.lift, lift, lift > this.lift ? 3 : 1.2, dt);
-    const pitch = Math.min(1.3, this.pitch + this.lift);
+    const pitch = Math.min(1.3, this.pitch + this.lift - this.climb * 0.14);
     const cp = Math.cos(pitch);
     const dir = this.dir.set(Math.sin(this.yaw) * cp, Math.sin(pitch), Math.cos(this.yaw) * cp);
 
