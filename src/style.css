@@ -84,6 +84,9 @@ kbd {
 .hp-num small { color: var(--text-dim); font-size: 11px; }
 .belly-tag { display: flex; align-items: center; gap: 6px; font: 600 10.5px var(--f-body); letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-dim); text-shadow: var(--shadow-text); transition: color 0.3s; }
 .belly-tag kbd { font-size: 9px; }
+.hp-num, .belly-tag { white-space: nowrap; }
+/* (French labels are longer) */
+:lang(fr) .belly-tag { letter-spacing: 0.05em; }
 .belly-tag.ready { color: var(--jade-hi); }
 .belly-tag.ready kbd { border-color: var(--jade); box-shadow: 0 0 8px rgba(79, 211, 154, 0.7), 0 2px 0 rgba(0, 0, 0, 0.45); }
 

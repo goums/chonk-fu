@@ -2,6 +2,7 @@
 // and sparkles for pickups. All sprites from canvas textures, pooled.
 import * as THREE from 'three';
 import { excludeFromAO } from './highlight';
+import { t } from '../i18n';
 
 interface Fx { obj: THREE.Sprite; t: number; life: number; vy: number; grow: number; fade: boolean }
 
@@ -99,7 +100,8 @@ export class Effects {
 
   hit(x: number, y: number, z: number, move: string, damage: number, byPlayer: boolean) {
     const words = WORDS[move] ?? WORDS.jab;
-    const word = words[this.n++ % words.length];
+    // (the game picks the English word; it is translated for display only)
+    const word = t(words[this.n++ % words.length]);
     const big = move === 'kick' || move === 'belly' || move === 'slam';
     this.spawn(burstTexture(byPlayer ? '#ffd23a' : '#ff6a4a'), x, y, z, big ? 2.2 : 1.5, big ? 2.2 : 1.5, 0.22, 0, 6);
     if (byPlayer) this.spawn(textTexture(word, big ? '#ff5a3a' : '#ffe14a'), x + (this.n % 2 ? 0.6 : -0.6), y + 0.9, z, big ? 3.2 : 2.3, big ? 1.2 : 0.9, 0.7, 1.4, 0.6);
@@ -107,10 +109,10 @@ export class Effects {
   }
 
   text(text: string, x: number, y: number, z: number, color = '#ffe14a', scale = 1) {
-    const t = textTexture(text, color);
-    const img = t.image as HTMLCanvasElement;
+    const tex = textTexture(t(text), color);
+    const img = tex.image as HTMLCanvasElement;
     const h = 0.9 * scale;
-    this.spawn(t, x, y, z, (h * img.width) / img.height, h, 1.4, 1.0, 0);
+    this.spawn(tex, x, y, z, (h * img.width) / img.height, h, 1.4, 1.0, 0);
   }
 
   dust(x: number, y: number, z: number, n = 6, size = 1) {

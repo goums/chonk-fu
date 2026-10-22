@@ -57,7 +57,7 @@ function newGame() {
   root.className = '';
   hud = new Hud(root, game);
   follow.yaw = 0;
-  Object.assign((window as unknown as { chonk: object }).chonk, { game, player: game.player });
+  Object.assign((window as unknown as { chonk: object }).chonk, { game, player: game.player, hud });
   return game;
 }
 const audio = new GameAudio(); // starts on the first key / pointer press, M mutes
@@ -193,4 +193,4 @@ function frame(now: number) {
 requestAnimationFrame(frame);
 
 // debug handle for development and the agent harness
-Object.assign(window, { chonk: { game, player: game.player, follow, scene, camera, renderer, THREE, post, tick, external, audio, agent: () => agent } });
+Object.assign(window, { chonk: { game, player: game.player, hud, follow, scene, camera, renderer, THREE, post, tick, external, audio, agent: () => agent } });

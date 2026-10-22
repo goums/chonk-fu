@@ -17,6 +17,7 @@ Wolf bandits ran through the Valley of Peace. A tiger called Overfit learned eve
 - Smash crates and rocks, find the five Jade Stones, cook the Dragon Noodles, beat Overfit.
 - A Training Arena with a coach and a sparring partner.
 - Music and sounds are generated in code.
+- English and French (EN / FR button, bottom right).
 
 **Keys:** arrows move · Shift sprint · J punch · K belly jump · Space jump · Enter talk · M mute.
 
