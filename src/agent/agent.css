@@ -1,5 +1,5 @@
 .ag-panel {
-  position: fixed; right: 14px; bottom: 14px; width: min(340px, calc(100vw - 28px)); max-height: min(62vh, 560px);
+  position: fixed; right: 14px; bottom: 14px; width: min(440px, calc(100vw - 28px)); max-height: min(62vh, 560px);
   display: flex; flex-direction: column; z-index: 20;
   background: linear-gradient(180deg, rgba(14, 16, 15, 0.9), rgba(8, 10, 9, 0.86));
   border: 1px solid rgba(217, 181, 106, 0.45); border-radius: 4px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
@@ -10,7 +10,7 @@
 .ag-panel.folded .ag-body { display: none; }
 .ag-panel.folded .ag-head { border-bottom-color: transparent; padding: 0; }
 .ag-head { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 9px 10px; border-bottom: 1px solid rgba(217, 181, 106, 0.22); }
-.ag-head .ag-play { margin-right: auto; }
+.ag-head .ag-play { margin-right: auto; white-space: nowrap; letter-spacing: 0.16em; }
 .ag-panel.folded .ag-play { margin-right: 0; }
 /* every header button is the same height; icon buttons are square */
 .ag-head .hud-btn { height: 30px; box-sizing: border-box; }
