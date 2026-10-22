@@ -149,9 +149,13 @@ const BEAM_FRAG = /* glsl */ `
     // brightest through the middle of the column, soft at its silhouette
     float facing = abs(dot(normalize(vN), normalize(vV)));
     float body = pow(facing, 1.6);
-    float fade = pow(1.0 - vH, 1.8) * smoothstep(0.0, 0.015, vH);
+    // vH overshoots 1.0 a hair at the rim: pow() of a negative base is NaN, and one NaN pixel in the HDR
+    // target is smeared by the bloom blur into a big black block (seen from the palace plateau, whose
+    // height puts the top of a village beacon in view)
+    float h = clamp(vH, 0.0, 1.0);
+    float fade = pow(1.0 - h, 1.8) * smoothstep(0.0, 0.015, h);
     // slow bands of light rising up the column
-    float bands = 0.75 + 0.25 * smoothstep(0.75, 1.0, fract(vH * 9.0 - uTime * 0.35));
+    float bands = 0.75 + 0.25 * smoothstep(0.75, 1.0, fract(h * 9.0 - uTime * 0.35));
     float a = uAlpha * body * fade * bands;
     gl_FragColor = vec4(uColor, a);
   }`;

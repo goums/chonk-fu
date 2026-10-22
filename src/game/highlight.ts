@@ -55,7 +55,7 @@ const RIM_FRAG = /* glsl */ `
   varying vec3 vN;
   varying vec3 vV;
   void main() {
-    float f = 1.0 - abs(dot(normalize(vN), normalize(vV)));
+    float f = max(0.0, 1.0 - abs(dot(normalize(vN), normalize(vV)))); // never a negative pow() base (NaN)
     float a = uStrength * (pow(f, 2.4) * 1.5 + 0.07);
     gl_FragColor = vec4(uColor, a);
   }`;
